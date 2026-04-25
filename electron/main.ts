@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { promises as fs } from "node:fs";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
@@ -80,6 +81,7 @@ app.on("window-all-closed", () => {
 
 app.on("before-quit", async () => {
   if (agent.isRunning()) await agent.cancel();
+  if (agent.isPreviewRunning()) await agent.stopPreview();
 });
 
 // ─── IPC handlers ──────────────────────────────────────────────────────────
@@ -107,6 +109,20 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("agent:is-running", async () => agent.isRunning());
 
+  ipcMain.handle("fs:read-text", async (_, path: string) => {
+    try {
+      return await fs.readFile(path, "utf8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw err;
+    }
+  });
+
+  ipcMain.handle("fs:write-text", async (_, path: string, content: string) => {
+    await fs.mkdir(dirname(path), { recursive: true });
+    await fs.writeFile(path, content, "utf8");
+  });
+
   ipcMain.handle("dialog:pick-folder", async (_, title?: string) => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -124,6 +140,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle("shell:reveal-in-folder", async (_, path: string) => {
     shell.showItemInFolder(path);
   });
+
+  ipcMain.handle("shell:open-external", async (_, url: string) => {
+    await shell.openExternal(url);
+  });
+
+  ipcMain.handle("preview:start", async (_, workspacePath: string) => {
+    return agent.startPreview(workspacePath);
+  });
+
+  ipcMain.handle("preview:stop", async () => {
+    await agent.stopPreview();
+  });
+
+  ipcMain.handle("preview:state", async () => agent.getPreviewState());
 
   ipcMain.handle("meta:app-version", async () => app.getVersion());
 

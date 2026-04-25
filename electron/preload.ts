@@ -28,12 +28,29 @@ const bridge: StudioBridge = {
       return () => ipcRenderer.removeListener("agent-event", listener);
     },
   },
+  fs: {
+    readText: (path) => ipcRenderer.invoke("fs:read-text", path) as Promise<string | null>,
+    writeText: (path, content) =>
+      ipcRenderer.invoke("fs:write-text", path, content) as Promise<void>,
+  },
   dialog: {
     pickFolder: (title) => ipcRenderer.invoke("dialog:pick-folder", title) as Promise<string | null>,
   },
   shell: {
     openPath: (path) => ipcRenderer.invoke("shell:open-path", path) as Promise<void>,
     revealInFolder: (path) => ipcRenderer.invoke("shell:reveal-in-folder", path) as Promise<void>,
+    openExternal: (url) => ipcRenderer.invoke("shell:open-external", url) as Promise<void>,
+  },
+  preview: {
+    start: (workspacePath) =>
+      ipcRenderer.invoke("preview:start", workspacePath) as Promise<{ url: string }>,
+    stop: () => ipcRenderer.invoke("preview:stop") as Promise<void>,
+    state: () =>
+      ipcRenderer.invoke("preview:state") as Promise<{
+        running: boolean;
+        url: string | null;
+        workspace: string | null;
+      }>,
   },
   meta: {
     appVersion: () => ipcRenderer.invoke("meta:app-version") as Promise<string>,

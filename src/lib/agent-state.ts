@@ -38,6 +38,8 @@ const PHASE_TO_STAGE: Record<string, StageId> = {
   awaiting_approval: "script",
   narration: "narration",
   composing: "compose",
+  awaiting_compose_approval: "compose",
+  revising_composition: "compose",
   rendering: "render",
 };
 

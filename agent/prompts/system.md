@@ -154,6 +154,18 @@ For each requested aspect ratio in the formats list (1080×1080, 1920×1080, 108
 
 Emit: `{"type":"progress","phase":"composing","message":"Authored 1080x1080 + 1920x1080 compositions (lint clean)","progress":0.7}`
 
+### Stage 5b — Composition approval (HARD GATE)
+
+After Stage 5's lint passes, the orchestrator emits a `compose-approval` prompt with options ["render", "cancel"] and the list of authored compositions. The user can:
+
+- click `render →` → proceed to Stage 6
+- click `cancel →` → abort the run
+- type free-text revision notes → the orchestrator re-runs you with `revising_composition` phase, asking you to apply those notes to the existing composition(s)
+
+**During the revision pass:** read the existing `index.html`, apply the user's notes, re-run `npx hyperframes lint` and `npx hyperframes validate`, then stop. Don't restart the whole compose stage. Don't fight the user's direction; if they say "tighter title cards" or "slower stagger", just do it within the DESIGN.md palette.
+
+The user may also click `preview →` for any aspect — that launches `npx hyperframes preview` in your workspace. You don't need to do anything; the renderer manages that process. Just wait for the response.
+
 ### Stage 6 — Render
 
 For each requested format, render the matching aspect:

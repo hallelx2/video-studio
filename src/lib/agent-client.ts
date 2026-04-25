@@ -51,12 +51,40 @@ export async function pickFolder(title?: string): Promise<string | null> {
   return studio().dialog.pickFolder(title);
 }
 
+export async function readText(path: string): Promise<string | null> {
+  return studio().fs.readText(path);
+}
+
+export async function writeText(path: string, content: string): Promise<void> {
+  return studio().fs.writeText(path, content);
+}
+
 export async function openPath(path: string): Promise<void> {
   return studio().shell.openPath(path);
 }
 
 export async function revealInFolder(path: string): Promise<void> {
   return studio().shell.revealInFolder(path);
+}
+
+export async function openExternal(url: string): Promise<void> {
+  return studio().shell.openExternal(url);
+}
+
+export async function startPreview(workspacePath: string): Promise<{ url: string }> {
+  return studio().preview.start(workspacePath);
+}
+
+export async function stopPreview(): Promise<void> {
+  return studio().preview.stop();
+}
+
+export async function previewState(): Promise<{
+  running: boolean;
+  url: string | null;
+  workspace: string | null;
+}> {
+  return studio().preview.state();
 }
 
 /** Subscribe to the agent event stream. Returns an unsubscribe function. */

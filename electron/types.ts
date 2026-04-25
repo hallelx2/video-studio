@@ -179,12 +179,26 @@ export interface StudioBridge {
     /** Returns an unsubscribe function. */
     onEvent(handler: (event: AgentEvent) => void): () => void;
   };
+  fs: {
+    /** Read a UTF-8 text file. Returns null if the file doesn't exist. */
+    readText(path: string): Promise<string | null>;
+    /** Atomically write UTF-8 text to a file. Creates parent dirs. */
+    writeText(path: string, content: string): Promise<void>;
+  };
   dialog: {
     pickFolder(title?: string): Promise<string | null>;
   };
   shell: {
     openPath(path: string): Promise<void>;
     revealInFolder(path: string): Promise<void>;
+    openExternal(url: string): Promise<void>;
+  };
+  preview: {
+    /** Start the HyperFrames preview dev server in the given workspace.
+     *  Returns the URL the user can open in a browser. */
+    start(workspacePath: string): Promise<{ url: string }>;
+    stop(): Promise<void>;
+    state(): Promise<{ running: boolean; url: string | null; workspace: string | null }>;
   };
   meta: {
     appVersion(): Promise<string>;

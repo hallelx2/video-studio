@@ -4,8 +4,10 @@ import {
   cancelAgent,
   generateVideo,
   getConfig,
+  isAgentRunning,
   onAgentEvent,
   respondToPrompt,
+  stopPreview,
 } from "../lib/agent-client.js";
 import {
   FORMAT_OPTIONS,
@@ -48,12 +50,19 @@ export function WorkbenchRoute() {
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [running, setRunning] = useState(false);
 
-  // Hydrate defaults from config on first mount.
+  // Hydrate defaults from config + sync with the bridge's actual run state.
+  // The local `running` flag can drift if the renderer remounts (HMR, route
+  // changes) while the main-process bridge still has a live child.
   useEffect(() => {
     getConfig()
       .then((cfg) => {
         setVideoType(cfg.defaultVideoType);
         setFormats(cfg.defaultFormats);
+      })
+      .catch(() => undefined);
+    isAgentRunning()
+      .then((r) => {
+        if (r) setRunning(true);
       })
       .catch(() => undefined);
   }, []);
@@ -128,16 +137,22 @@ export function WorkbenchRoute() {
         return;
       }
 
-      // 2. Running — interrupt and restart with combined brief.
-      if (running) {
+      // 2. Always check the BRIDGE's actual state, not just our local flag.
+      // The local flag can drift if the renderer remounts mid-run, leaving us
+      // thinking we're idle when there's still a child process.
+      const actuallyRunning = await isAgentRunning().catch(() => false);
+
+      // 3. Running — interrupt and restart with combined brief.
+      if (actuallyRunning) {
         pushUserMessage(text, "interrupt");
         await cancelAgent();
+        setRunning(false);
         const combined = [briefRef.current, text].filter(Boolean).join("\n\n[INTERRUPT] ");
         await startRun(combined);
         return;
       }
 
-      // 3. Idle / complete / error — start a fresh run.
+      // 4. Idle / complete / error — start a fresh run.
       const isFollowUp = events.some((e) => e.type === "result");
       pushUserMessage(text, isFollowUp ? "follow-up" : "brief");
 
@@ -153,11 +168,12 @@ export function WorkbenchRoute() {
 
       await startRun(nextBrief);
     },
-    [agent.pendingPrompt, running, events, handlePromptResponse, pushUserMessage, startRun]
+    [agent.pendingPrompt, events, handlePromptResponse, pushUserMessage, startRun]
   );
 
   const handleStop = useCallback(async () => {
     await cancelAgent();
+    await stopPreview().catch(() => undefined);
     setRunning(false);
   }, []);
 

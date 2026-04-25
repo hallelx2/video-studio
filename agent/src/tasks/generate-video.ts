@@ -247,6 +247,87 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
   });
 
+  // ─── Compose-approval gate: render now, preview first, or revise ───────
+  // Each composition lives at <workspace>/<aspect>/index.html. The renderer
+  // can launch `hyperframes preview` for any of these so the user can see
+  // the actual GSAP timeline play before committing to a render.
+  const aspects = aspectsFromFormats(opts.formats);
+  const compositions = aspects.map((aspect) => ({
+    aspect,
+    path: join(projectWorkspacePath, aspect),
+    indexHtml: join(projectWorkspacePath, aspect, "index.html"),
+  }));
+
+  let composeApproved = false;
+  let composeRevision = 0;
+
+  while (!composeApproved && composeRevision < 5) {
+    emit({
+      type: "progress",
+      phase: "awaiting_compose_approval",
+      message: "Composition ready — preview or render?",
+      progress: 0.8,
+    });
+
+    const composeResponse = await opts.askUser(
+      "Composition is ready. Render now, or preview first?",
+      ["render", "cancel"],
+      {
+        kind: "compose-approval",
+        compositions,
+        projectWorkspacePath,
+        revision: composeRevision,
+        acceptsFreeText: true,
+      }
+    );
+
+    const composeTrimmed = composeResponse.trim();
+
+    if (composeTrimmed === "cancel" || composeTrimmed === "") {
+      emit({
+        type: "result",
+        status: "needs_input",
+        message: "Cancelled at composition approval.",
+      });
+      return;
+    }
+
+    if (composeTrimmed === "render") {
+      composeApproved = true;
+      break;
+    }
+
+    // Free text: treat as revision notes for the composition itself
+    composeRevision += 1;
+    emit({
+      type: "progress",
+      phase: "revising_composition",
+      message: `Revising composition (round ${composeRevision})`,
+      progress: 0.7,
+    });
+
+    await runAgent({
+      prompt: reviseCompositionPrompt({
+        projectId: opts.projectId,
+        compositions,
+        notes: composeTrimmed,
+        revision: composeRevision,
+      }),
+      systemPrompt: opts.systemPrompt,
+      cwd: projectWorkspacePath,
+      env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+    });
+  }
+
+  if (!composeApproved) {
+    emit({
+      type: "result",
+      status: "needs_input",
+      message: "Maximum composition revisions reached without approval.",
+    });
+    return;
+  }
+
   // ─── Stage 6: Render ───────────────────────────────────────────────────
   emit({
     type: "progress",
@@ -397,6 +478,33 @@ function reviseScriptPrompt(args: {
     ``,
     `Re-write ${args.scriptPath} in place. Preserve scene IDs where possible.`,
     `Stop after writing.`,
+  ].join("\n");
+}
+
+function reviseCompositionPrompt(args: {
+  projectId: string;
+  compositions: Array<{ aspect: string; path: string; indexHtml: string }>;
+  notes: string;
+  revision: number;
+}): string {
+  const paths = args.compositions.map((c) => `  - ${c.indexHtml} (${c.aspect})`).join("\n");
+  return [
+    `COMPOSITION REVISION ${args.revision} — User requested changes after preview.`,
+    ``,
+    `Apply these notes to the existing composition(s):`,
+    ``,
+    args.notes,
+    ``,
+    `Compositions to update:`,
+    paths,
+    ``,
+    `Rules:`,
+    `- Honour the resolved DESIGN.md — do not introduce colours/fonts outside the palette.`,
+    `- Honour the HyperFrames hard rules: no exit animations except final scene, deterministic timelines, no Math.random / Date.now, audio always as separate <audio> element, no repeat: -1.`,
+    `- Re-run \`npx hyperframes lint\` after editing — must pass with zero errors.`,
+    `- If contrast warnings appear, adjust within the DESIGN.md palette (don't invent new colours).`,
+    ``,
+    `Stop after the lint passes clean.`,
   ].join("\n");
 }
 

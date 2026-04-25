@@ -1,24 +1,23 @@
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import {
+  spawn,
+  type ChildProcess,
+  type ChildProcessWithoutNullStreams,
+} from "node:child_process";
 import { app, type BrowserWindow } from "electron";
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
 
 /**
- * Owns the lifecycle of the agent child process.
- *
- * Protocol over stdio:
- *   - main → agent: command + JSON payload as CLI args (one shot per run)
- *   - agent → main: NDJSON on stdout, one event per line, parsed to AgentEvent
- *   - agent → main: free-form stderr, forwarded as { type: "agent_log", level: "stderr" }
- *
- * For prompt responses (mid-run), main writes a single JSON line to the agent's stdin.
- * The agent listens for "{ type: 'prompt-response', id, response }\n" lines.
- *
- * One agent run at a time. `generate()` rejects if a run is already active.
+ * Owns the lifecycle of the agent child process AND the optional HyperFrames
+ * preview process — a long-running dev server the user can open in their
+ * browser to inspect a composition before committing to a full render.
  */
 export class AgentBridge {
   private proc: ChildProcessWithoutNullStreams | null = null;
+  private previewProc: ChildProcess | null = null;
+  private previewUrl: string | null = null;
+  private previewWorkspace: string | null = null;
   private window: BrowserWindow | null = null;
   private buffer = "";
 
@@ -28,6 +27,101 @@ export class AgentBridge {
 
   isRunning(): boolean {
     return this.proc !== null && !this.proc.killed;
+  }
+
+  // ─── Preview lifecycle ───────────────────────────────────────────────
+  // The HyperFrames dev server runs `npx hyperframes preview` in a
+  // composition workspace. Default port 3002, hot-reloads on file changes.
+  // We spawn it detached so killing the agent doesn't take the preview down.
+
+  isPreviewRunning(): boolean {
+    return this.previewProc !== null && !this.previewProc.killed;
+  }
+
+  getPreviewState(): { running: boolean; url: string | null; workspace: string | null } {
+    return {
+      running: this.isPreviewRunning(),
+      url: this.previewUrl,
+      workspace: this.previewWorkspace,
+    };
+  }
+
+  async startPreview(workspacePath: string, port = 3002): Promise<{ url: string }> {
+    // If a preview is already running for the same workspace, reuse it.
+    if (this.isPreviewRunning() && this.previewWorkspace === workspacePath && this.previewUrl) {
+      return { url: this.previewUrl };
+    }
+    // Otherwise tear down the previous one before starting fresh.
+    if (this.isPreviewRunning()) {
+      await this.stopPreview();
+    }
+
+    const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+    const proc = spawn(npx, ["hyperframes", "preview", "--port", String(port)], {
+      cwd: workspacePath,
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+      env: { ...process.env, BROWSER: "none" },
+    });
+
+    this.previewProc = proc;
+    this.previewWorkspace = workspacePath;
+    this.previewUrl = `http://localhost:${port}`;
+
+    proc.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        this.emit({ type: "agent_log", level: "preview", text: line });
+      }
+    });
+    proc.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        this.emit({ type: "agent_log", level: "preview-err", text: line });
+      }
+    });
+    proc.on("error", (err) => {
+      this.emit({
+        type: "error",
+        scope: "preview",
+        message: `failed to spawn hyperframes preview: ${err.message}`,
+        recoverable: true,
+      });
+      this.previewProc = null;
+      this.previewUrl = null;
+      this.previewWorkspace = null;
+    });
+    proc.on("exit", () => {
+      this.previewProc = null;
+      this.previewUrl = null;
+      this.previewWorkspace = null;
+    });
+
+    return { url: this.previewUrl };
+  }
+
+  async stopPreview(): Promise<void> {
+    if (!this.previewProc) return;
+    const proc = this.previewProc;
+    return new Promise<void>((resolve) => {
+      const onExit = () => {
+        proc.removeListener("exit", onExit);
+        resolve();
+      };
+      proc.once("exit", onExit);
+      proc.kill("SIGTERM");
+      const escalation = setTimeout(() => {
+        if (!proc.killed) proc.kill("SIGKILL");
+      }, 1500);
+      const ceiling = setTimeout(() => {
+        proc.removeListener("exit", onExit);
+        resolve();
+      }, 5000);
+      proc.once("exit", () => {
+        clearTimeout(escalation);
+        clearTimeout(ceiling);
+      });
+    });
   }
 
   async generate(req: GenerateRequest, config: AppConfig): Promise<void> {
