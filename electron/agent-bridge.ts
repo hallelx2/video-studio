@@ -127,14 +127,39 @@ export class AgentBridge {
     this.proc.stdin.write(line);
   }
 
+  /**
+   * Cancel the running agent and resolve once it has actually exited.
+   * Awaitable so callers can immediately spawn a replacement run.
+   */
   async cancel(): Promise<void> {
     if (!this.proc) return;
-    // Try graceful kill first; fall back to SIGKILL after a beat.
-    this.proc.kill("SIGTERM");
     const proc = this.proc;
-    setTimeout(() => {
-      if (proc && !proc.killed) proc.kill("SIGKILL");
-    }, 1500);
+
+    return new Promise<void>((resolve) => {
+      const onExit = () => {
+        proc.removeListener("exit", onExit);
+        resolve();
+      };
+      proc.once("exit", onExit);
+
+      // Try graceful kill first; escalate to SIGKILL if it doesn't exit in time.
+      proc.kill("SIGTERM");
+      const escalation = setTimeout(() => {
+        if (!proc.killed) proc.kill("SIGKILL");
+      }, 1500);
+
+      // Belt-and-suspenders: if the proc never exits at all, resolve after
+      // a hard ceiling so the UI doesn't hang.
+      const ceiling = setTimeout(() => {
+        proc.removeListener("exit", onExit);
+        resolve();
+      }, 5000);
+
+      proc.once("exit", () => {
+        clearTimeout(escalation);
+        clearTimeout(ceiling);
+      });
+    });
   }
 
   private handleStdout(chunk: Buffer): void {

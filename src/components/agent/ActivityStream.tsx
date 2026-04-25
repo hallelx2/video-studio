@@ -1,21 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn.js";
-import type { Activity } from "../../lib/agent-state.js";
+import type { Activity, PendingPrompt } from "../../lib/agent-state.js";
 import { TextCard } from "./TextCard.js";
 import { ToolCallCard } from "./ToolCallCard.js";
 import { ProgressCard, LogCard, ErrorCard, RawCard } from "./MetaCards.js";
+import { UserMessageCard } from "./UserMessageCard.js";
+import { InlineApproval } from "./InlineApproval.js";
 
-type FilterKey = "all" | "text" | "tools" | "progress" | "errors";
+type FilterKey = "all" | "chat" | "tools" | "progress" | "errors";
 
 const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: "all", label: "All" },
-  { key: "text", label: "Thinking" },
+  { key: "chat", label: "Chat" },
   { key: "tools", label: "Tools" },
   { key: "progress", label: "Progress" },
   { key: "errors", label: "Errors" },
 ];
 
-export function ActivityStream({ activities }: { activities: Activity[] }) {
+export function ActivityStream({
+  activities,
+  pendingPrompt,
+  onRespondToPrompt,
+}: {
+  activities: Activity[];
+  pendingPrompt?: PendingPrompt | null;
+  onRespondToPrompt?: (response: string) => void | Promise<void>;
+}) {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -26,8 +36,8 @@ export function ActivityStream({ activities }: { activities: Activity[] }) {
     switch (filter) {
       case "all":
         return activities;
-      case "text":
-        return activities.filter((a) => a.kind === "text");
+      case "chat":
+        return activities.filter((a) => a.kind === "user" || a.kind === "text");
       case "tools":
         return activities.filter((a) => a.kind === "tool");
       case "progress":
@@ -44,7 +54,7 @@ export function ActivityStream({ activities }: { activities: Activity[] }) {
     const node = scrollRef.current;
     if (!node) return;
     node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
-  }, [visible.length, autoScroll]);
+  }, [visible.length, pendingPrompt?.id, autoScroll]);
 
   const handleScroll = () => {
     const node = scrollRef.current;
@@ -66,7 +76,7 @@ export function ActivityStream({ activities }: { activities: Activity[] }) {
                 key={f.key}
                 onClick={() => setFilter(f.key)}
                 className={cn(
-                  "flex items-baseline gap-2 px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                  "relative flex items-baseline gap-2 px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
                   isActive ? "text-paper" : "text-paper-mute hover:text-paper"
                 )}
               >
@@ -82,7 +92,7 @@ export function ActivityStream({ activities }: { activities: Activity[] }) {
                   </span>
                 )}
                 {isActive && (
-                  <span className="absolute h-px w-full translate-y-3 bg-cinnabar" />
+                  <span className="absolute bottom-0 left-3 right-3 h-px bg-cinnabar" />
                 )}
               </button>
             );
@@ -106,13 +116,18 @@ export function ActivityStream({ activities }: { activities: Activity[] }) {
         onScroll={handleScroll}
         className="flex-1 overflow-y-auto px-12 py-6"
       >
-        {visible.length === 0 ? (
+        {visible.length === 0 && !pendingPrompt ? (
           <Empty filter={filter} />
         ) : (
           <ul className="flex flex-col gap-2">
             {visible.map((activity) => (
               <li key={activity.id}>{renderActivity(activity)}</li>
             ))}
+            {pendingPrompt && onRespondToPrompt && (filter === "all" || filter === "chat") && (
+              <li>
+                <InlineApproval prompt={pendingPrompt} onRespond={onRespondToPrompt} />
+              </li>
+            )}
           </ul>
         )}
       </div>
@@ -122,6 +137,8 @@ export function ActivityStream({ activities }: { activities: Activity[] }) {
 
 function renderActivity(activity: Activity): React.ReactNode {
   switch (activity.kind) {
+    case "user":
+      return <UserMessageCard activity={activity} />;
     case "text":
       return <TextCard activity={activity} />;
     case "tool":
@@ -139,8 +156,8 @@ function renderActivity(activity: Activity): React.ReactNode {
 
 function Empty({ filter }: { filter: FilterKey }) {
   const messages: Record<FilterKey, string> = {
-    all: "No activity yet.",
-    text: "The agent hasn't said anything yet.",
+    all: "Empty. Start a conversation below.",
+    chat: "No messages yet.",
     tools: "No tools called yet.",
     progress: "No stage progress yet.",
     errors: "No errors. Good.",
@@ -155,6 +172,7 @@ function Empty({ filter }: { filter: FilterKey }) {
 }
 
 interface KindCounts {
+  user: number;
   text: number;
   tool: number;
   progress: number;
@@ -163,9 +181,17 @@ interface KindCounts {
 }
 
 function countByKind(activities: Activity[]): KindCounts {
-  const counts: KindCounts = { text: 0, tool: 0, progress: 0, error: 0, total: activities.length };
+  const counts: KindCounts = {
+    user: 0,
+    text: 0,
+    tool: 0,
+    progress: 0,
+    error: 0,
+    total: activities.length,
+  };
   for (const a of activities) {
-    if (a.kind === "text") counts.text += 1;
+    if (a.kind === "user") counts.user += 1;
+    else if (a.kind === "text") counts.text += 1;
     else if (a.kind === "tool") counts.tool += 1;
     else if (a.kind === "progress") counts.progress += 1;
     else if (a.kind === "error") counts.error += 1;
@@ -177,8 +203,8 @@ function countForFilter(c: KindCounts, key: FilterKey): number {
   switch (key) {
     case "all":
       return c.total;
-    case "text":
-      return c.text;
+    case "chat":
+      return c.user + c.text;
     case "tools":
       return c.tool;
     case "progress":

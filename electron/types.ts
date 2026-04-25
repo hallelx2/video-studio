@@ -119,6 +119,14 @@ export interface UsageInfo {
 }
 
 export type AgentEvent =
+  /** Synthetic — injected by the renderer when the user types in the chat composer.
+   *  Never emitted by the agent itself; flows through the same event log so the
+   *  reducer can place it inline in the activity stream alongside agent events. */
+  | {
+      type: "user_message";
+      text: string;
+      kind: "brief" | "interrupt" | "approval-response" | "follow-up";
+    }
   | { type: "progress"; phase: string; message?: string; progress?: number }
   | {
       type: "prompt";

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   cancelAgent,
@@ -19,30 +19,31 @@ import { deriveAgentState } from "../lib/agent-state.js";
 import { StageTimeline } from "../components/agent/StageTimeline.js";
 import { ActivityStream } from "../components/agent/ActivityStream.js";
 import { RunMetricsBar } from "../components/agent/RunMetricsBar.js";
-import { PromptDock } from "../components/agent/PromptDock.js";
+import { Composer } from "../components/agent/Composer.js";
 
 /**
- * Workbench — generation surface for one project.
+ * Chat-shaped workbench.
  *
- * Right pane is now a proper agent inspector built around AG-UI patterns:
- *   ┌──────────────────────────────────────────────────────────┐
- *   │  StageTimeline (always visible — 6-stage pipeline)       │
- *   ├──────────────────────────────────────────────────────────┤
- *   │  ActivityStream (filterable: text / tools / progress …) │
- *   │  with full-takeover PromptApprovalPanel on HITL events   │
- *   ├──────────────────────────────────────────────────────────┤
- *   │  RunMetricsBar (status · elapsed · tools · tokens · $)   │
- *   └──────────────────────────────────────────────────────────┘
+ * Right pane is a conversation with an always-live composer at the bottom.
+ * The user can type at any time; behavior adapts to the agent's current state:
  *
- * Raw events are kept in state; the structured AgentRunState is derived
- * via deriveAgentState() — pure projection, deterministic.
+ *   - idle / complete / error : send starts a new run
+ *   - running                 : send cancels the current run, restarts with combined brief
+ *   - awaiting_input          : send becomes revision notes for the pending prompt
+ *
+ * Approval buttons render INLINE at the end of the activity stream when there's
+ * a pending prompt — not in a separate dock. The user can also just type into
+ * the composer and the text becomes revision notes (the agent task accepts any
+ * non-{approve,cancel} response as notes).
  */
 export function WorkbenchRoute() {
   const { productId } = useParams<{ productId: string }>();
 
   const [videoType, setVideoType] = useState<VideoType>("product-launch");
   const [formats, setFormats] = useState<VideoFormat[]>(["linkedin", "x"]);
-  const [brief, setBrief] = useState("");
+
+  /** Brief carried across runs — the "context" the agent reads when invoked. */
+  const briefRef = useRef<string>("");
 
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [running, setRunning] = useState(false);
@@ -67,45 +68,101 @@ export function WorkbenchRoute() {
     return unsubscribe;
   }, []);
 
-  // Derive structured state from the raw event log on every render.
   const agent = useMemo(() => deriveAgentState(events), [events]);
 
   const toggleFormat = (f: VideoFormat) => {
     setFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
   };
 
-  const handleGenerate = useCallback(async () => {
-    if (!productId) return;
-    setEvents([]);
-    setRunning(true);
-    try {
-      await generateVideo({
-        projectId: productId,
-        videoType,
-        formats,
-        brief: brief.trim() || undefined,
-      });
-    } catch (err) {
-      setEvents((prev) => [
-        ...prev,
-        { type: "error", message: String(err), scope: "renderer", recoverable: false },
-      ]);
-      setRunning(false);
-    }
-  }, [productId, videoType, formats, brief]);
+  /** Push a synthetic user_message event so it appears in the stream. */
+  const pushUserMessage = useCallback(
+    (text: string, kind: "brief" | "interrupt" | "approval-response" | "follow-up") => {
+      setEvents((prev) => [...prev, { type: "user_message", text, kind }]);
+    },
+    []
+  );
 
-  const handleCancel = useCallback(async () => {
+  /** Kick off a generate run with the current brief + extra context. */
+  const startRun = useCallback(
+    async (brief: string) => {
+      if (!productId) return;
+      briefRef.current = brief;
+      setRunning(true);
+      try {
+        await generateVideo({
+          projectId: productId,
+          videoType,
+          formats,
+          brief: brief.trim() || undefined,
+        });
+      } catch (err) {
+        setEvents((prev) => [
+          ...prev,
+          { type: "error", message: String(err), scope: "renderer", recoverable: false },
+        ]);
+        setRunning(false);
+      }
+    },
+    [productId, videoType, formats]
+  );
+
+  /** Respond to the agent's pending prompt. Free text becomes revision notes. */
+  const handlePromptResponse = useCallback(
+    async (response: string) => {
+      if (!agent.pendingPrompt) return;
+      // Show user-side intent in the stream when it's free-form notes.
+      if (response !== "approve" && response !== "cancel" && response.trim()) {
+        pushUserMessage(response, "approval-response");
+      }
+      await respondToPrompt(agent.pendingPrompt.id, response);
+    },
+    [agent.pendingPrompt, pushUserMessage]
+  );
+
+  /** Composer submit — state-aware dispatch. */
+  const handleComposerSubmit = useCallback(
+    async (text: string) => {
+      // 1. Awaiting input — send as revision notes / answer.
+      if (agent.pendingPrompt) {
+        await handlePromptResponse(text);
+        return;
+      }
+
+      // 2. Running — interrupt and restart with combined brief.
+      if (running) {
+        pushUserMessage(text, "interrupt");
+        await cancelAgent();
+        const combined = [briefRef.current, text].filter(Boolean).join("\n\n[INTERRUPT] ");
+        await startRun(combined);
+        return;
+      }
+
+      // 3. Idle / complete / error — start a fresh run.
+      const isFollowUp = events.some((e) => e.type === "result");
+      pushUserMessage(text, isFollowUp ? "follow-up" : "brief");
+
+      // For a follow-up, accumulate context. For a brand-new brief, reset.
+      const nextBrief = isFollowUp
+        ? [briefRef.current, text].filter(Boolean).join("\n\n[FOLLOW-UP] ")
+        : text;
+
+      // Clear the stream when starting fresh (brief), keep history on follow-up.
+      if (!isFollowUp) {
+        setEvents([{ type: "user_message", text, kind: "brief" }]);
+      }
+
+      await startRun(nextBrief);
+    },
+    [agent.pendingPrompt, running, events, handlePromptResponse, pushUserMessage, startRun]
+  );
+
+  const handleStop = useCallback(async () => {
     await cancelAgent();
     setRunning(false);
   }, []);
 
-  const handlePromptResponse = useCallback(async (response: string) => {
-    if (!agent.pendingPrompt) return;
-    await respondToPrompt(agent.pendingPrompt.id, response);
-  }, [agent.pendingPrompt]);
-
-  const canGenerate = !running && formats.length > 0 && !!productId;
   const typeMeta = useMemo(() => VIDEO_TYPES.find((t) => t.id === videoType)!, [videoType]);
+  const hasHistory = events.length > 0;
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -117,35 +174,21 @@ export function WorkbenchRoute() {
           </p>
           <h1 className="display-sm mt-1 text-4xl text-paper">{productId}</h1>
         </div>
-        <div className="flex items-center gap-8">
-          {!running && (
-            <button
-              onClick={handleGenerate}
-              disabled={!canGenerate}
-              className={cn(
-                "border-b pb-1 text-sm font-medium transition-colors",
-                canGenerate
-                  ? "border-cinnabar text-cinnabar hover:text-paper"
-                  : "cursor-not-allowed border-paper-mute/30 text-paper-mute/50"
-              )}
-            >
-              generate video →
-            </button>
-          )}
-          {running && (
-            <button
-              onClick={handleCancel}
-              className="font-mono text-[10px] uppercase tracking-widest text-alarm transition-colors hover:text-paper"
-            >
-              cancel run
-            </button>
-          )}
-        </div>
+        <Link
+          to="/"
+          className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
+        >
+          ← all projects
+        </Link>
       </header>
 
-      {/* ─── Body: left rail (controls) + right pane (agent inspector) ─── */}
+      {/* ─── Body: scaffold rail (left) + chat inspector (right) ────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="hairline flex w-[360px] shrink-0 flex-col gap-10 overflow-y-auto border-r px-8 py-10 stagger-children">
+        <aside className="hairline flex w-[300px] shrink-0 flex-col gap-8 overflow-y-auto border-r px-7 py-8 stagger-children">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+            scaffold
+          </p>
+
           <Field eyebrow="01" title="Video type">
             <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
               {VIDEO_TYPES.map((t) => (
@@ -154,7 +197,7 @@ export function WorkbenchRoute() {
                   onClick={() => setVideoType(t.id as VideoType)}
                   disabled={running}
                   className={cn(
-                    "block bg-ink px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                    "block bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
                     videoType === t.id ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
                   )}
                 >
@@ -189,7 +232,7 @@ export function WorkbenchRoute() {
                     onClick={() => toggleFormat(f.id)}
                     disabled={running}
                     className={cn(
-                      "flex items-center justify-between bg-ink px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                      "flex items-center justify-between bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
                       on ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
                     )}
                   >
@@ -208,28 +251,23 @@ export function WorkbenchRoute() {
             </div>
           </Field>
 
-          <Field eyebrow="03" title="Brief (optional)">
-            <textarea
-              value={brief}
-              onChange={(e) => setBrief(e.target.value)}
-              rows={6}
-              placeholder="Anything the agent should know — angle, audience, references…"
-              disabled={running}
-              className="hairline w-full resize-none border bg-ink-raised p-3 font-mono text-xs text-paper placeholder:text-paper-mute/60 focus:border-cinnabar focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-            />
-          </Field>
+          <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-paper-mute/70">
+            scaffold pre-fills the agent's defaults. type into the chat to give a
+            specific brief, interrupt mid-run, or follow up after a render.
+          </p>
         </aside>
 
-        {/* ─── Agent inspector ─────────────────────────────────────────── */}
-        <section className="relative flex flex-1 flex-col overflow-hidden">
+        {/* ─── Chat inspector ──────────────────────────────────────────── */}
+        <section className="flex flex-1 flex-col overflow-hidden">
           <StageTimeline stages={agent.stages} currentStageId={agent.currentStageId} />
           <div className="relative flex-1 overflow-hidden">
-            <ActivityStream activities={agent.activities} />
-            {events.length === 0 && !running && <EmptyHero typeMeta={typeMeta} />}
+            <ActivityStream
+              activities={agent.activities}
+              pendingPrompt={agent.pendingPrompt}
+              onRespondToPrompt={handlePromptResponse}
+            />
+            {!hasHistory && !running && <EmptyHero typeMeta={typeMeta} project={productId ?? ""} />}
           </div>
-          {agent.pendingPrompt && (
-            <PromptDock prompt={agent.pendingPrompt} onRespond={handlePromptResponse} />
-          )}
           <RunMetricsBar
             status={agent.status}
             metrics={agent.metrics}
@@ -237,38 +275,42 @@ export function WorkbenchRoute() {
             toolCallErrors={agent.metrics.toolCallErrors}
             assistantBlocks={agent.metrics.assistantBlocks}
           />
+          <Composer
+            status={agent.status}
+            hasPendingPrompt={!!agent.pendingPrompt}
+            hasHistory={hasHistory}
+            onSubmit={handleComposerSubmit}
+            onStop={handleStop}
+            projectName={productId ?? "this project"}
+          />
         </section>
       </div>
-
-      <footer className="hairline border-t px-12 py-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-        <div className="flex items-center justify-between">
-          <Link to="/" className="transition-colors hover:text-paper">
-            ← projects
-          </Link>
-          <span className="tabular">
-            {formats.length} format{formats.length === 1 ? "" : "s"} ·{" "}
-            {typeMeta.defaultScenes} scenes · ~{typeMeta.defaultDuration}s
-          </span>
-        </div>
-      </footer>
     </div>
   );
 }
 
-function EmptyHero({ typeMeta }: { typeMeta: { label: string; defaultScenes: number; defaultDuration: number } }) {
+function EmptyHero({
+  typeMeta,
+  project,
+}: {
+  typeMeta: { label: string; defaultScenes: number; defaultDuration: number };
+  project: string;
+}) {
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink/95">
-      <div className="max-w-md text-center">
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink/95 px-12">
+      <div className="max-w-lg">
         <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-          the workshop is quiet
+          ready · workbench · {project}
         </p>
-        <p className="display-sm mt-4 text-3xl text-paper">
-          Press <span className="text-cinnabar">generate video</span>.
+        <p className="display mt-4 text-5xl text-paper">
+          What should we make?
         </p>
-        <p className="mt-6 text-xs leading-relaxed text-paper-mute">
-          The agent reads your project, drafts a {typeMeta.defaultScenes}-scene{" "}
-          <span className="text-paper">{typeMeta.label.toLowerCase()}</span> script (~{typeMeta.defaultDuration}s),
-          and pauses for your approval before spending any time on narration or rendering.
+        <p className="mt-6 text-sm leading-relaxed text-paper-mute">
+          Type below to brief the agent. The scaffold on the left is pre-set to a{" "}
+          <span className="text-paper">{typeMeta.label.toLowerCase()}</span> —{" "}
+          {typeMeta.defaultScenes} scenes, ~{typeMeta.defaultDuration}s — but the chat
+          overrides everything. You can interrupt mid-run, request changes inline, and
+          follow up after a render.
         </p>
       </div>
     </div>

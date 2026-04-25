@@ -55,12 +55,25 @@ const STAGE_LABELS: Record<StageId, string> = {
 // one Activity (or merges with a prior one — see ToolCallActivity).
 
 export type Activity =
+  | UserActivity
   | TextActivity
   | ToolCallActivity
   | ProgressActivity
   | LogActivity
   | ErrorActivity
   | RawActivity;
+
+export interface UserActivity {
+  kind: "user";
+  id: string;
+  ts: number;
+  text: string;
+  /** brief = first message that kicked off the run.
+   *  interrupt = mid-flight redirect.
+   *  approval-response = response submitted to a pending prompt.
+   *  follow-up = sent after a run completed. */
+  intent: "brief" | "interrupt" | "approval-response" | "follow-up";
+}
 
 export interface TextActivity {
   kind: "text";
@@ -221,6 +234,17 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
     if (state.status === "idle") state.status = "running";
 
     switch (event.type) {
+      case "user_message": {
+        state.activities.push({
+          kind: "user",
+          id: `e${i}`,
+          ts,
+          text: event.text,
+          intent: event.kind,
+        });
+        break;
+      }
+
       case "progress": {
         const stageId = PHASE_TO_STAGE[event.phase] ?? null;
         if (stageId) {

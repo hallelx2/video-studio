@@ -146,17 +146,23 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       progress: 0.3,
     });
 
+    // Single-step approval. The UI presents `approve` / `cancel` as buttons
+    // and treats any free-text response from the chat composer as revision
+    // notes. No second round-trip needed.
     const response = await opts.askUser(
       `Approve the ${opts.videoType} script for ${opts.projectId}?`,
-      ["approve", "request-changes", "cancel"],
+      ["approve", "cancel"],
       {
         scriptPath,
         preview: scriptPreview,
         revision,
+        acceptsFreeText: true,
       }
     );
 
-    if (response === "cancel") {
+    const trimmed = response.trim();
+
+    if (trimmed === "cancel" || trimmed === "") {
       emit({
         type: "result",
         status: "needs_input",
@@ -165,18 +171,12 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       return;
     }
 
-    if (response === "approve") {
+    if (trimmed === "approve") {
       approved = true;
       break;
     }
 
-    // request-changes — ask for revision notes and re-run drafting
-    const notes = await opts.askUser(
-      "What should change in the script?",
-      ["submit"],
-      { multiline: true }
-    );
-
+    // Anything else: treat as revision notes.
     revision += 1;
     emit({
       type: "progress",
@@ -189,7 +189,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       prompt: reviseScriptPrompt({
         projectId: opts.projectId,
         scriptPath,
-        notes,
+        notes: trimmed,
         revision,
       }),
       systemPrompt: opts.systemPrompt,
