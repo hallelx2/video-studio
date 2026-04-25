@@ -5,7 +5,13 @@
 
 export type VideoFormat = "linkedin" | "x" | "youtube" | "youtube-short" | "hero" | "pitch";
 
-export type VideoType = "hackathon-demo" | "product-launch" | "tutorial" | "storyline" | "custom";
+export type VideoType =
+  | "hackathon-demo"
+  | "product-launch"
+  | "explainer"
+  | "tutorial"
+  | "storyline"
+  | "custom";
 
 export interface VideoTypeOption {
   id: VideoType;
@@ -31,6 +37,13 @@ export const VIDEO_TYPES: VideoTypeOption[] = [
     description: "Six-act SaaS launch arc — hook, stakes, reveal, proof, mechanism, CTA.",
     defaultScenes: 6,
     defaultDuration: 90,
+  },
+  {
+    id: "explainer",
+    label: "Explainer",
+    description: "Concept walkthrough — problem, reframe, mechanism, why it matters.",
+    defaultScenes: 5,
+    defaultDuration: 75,
   },
   {
     id: "tutorial",

@@ -1,8 +1,10 @@
 import type { TextActivity } from "../../lib/agent-state.js";
+import { MarkdownText } from "./MarkdownText.js";
 
 /**
  * Agent's free-form thinking. Display typography (Fraunces italic) so it reads
- * like a voice, not a log line — distinct from progress and tool noise.
+ * like a voice, not a log line. Markdown emphasis (**bold**, *italic*, `code`)
+ * and bullet/numbered lists render properly via MarkdownText.
  */
 export function TextCard({ activity }: { activity: TextActivity }) {
   return (
@@ -17,9 +19,10 @@ export function TextCard({ activity }: { activity: TextActivity }) {
           </span>
         )}
       </header>
-      <p className="mt-2 max-w-3xl whitespace-pre-wrap font-display text-[15px] leading-relaxed text-paper">
-        {activity.text}
-      </p>
+      <MarkdownText
+        text={activity.text}
+        className="mt-2 max-w-3xl font-display text-[15px] italic text-paper"
+      />
     </article>
   );
 }

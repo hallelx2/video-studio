@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { cn } from "../../lib/cn.js";
 import type { TextActivity } from "../../lib/agent-state.js";
+import { MarkdownText } from "./MarkdownText.js";
 
 /**
  * Folded inter-tool agent text — Hypatia pattern. When the agent says a short
@@ -42,9 +43,10 @@ export function ReasoningCard({ activity }: { activity: TextActivity }) {
       </button>
       {open && (
         <div className="enter-rise pb-2 pl-0 pr-4 pt-1">
-          <p className="max-w-3xl whitespace-pre-wrap font-display text-[14px] italic leading-relaxed text-paper">
-            {activity.text}
-          </p>
+          <MarkdownText
+            text={activity.text}
+            className="max-w-3xl font-display text-[14px] italic text-paper"
+          />
         </div>
       )}
     </article>

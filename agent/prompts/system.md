@@ -39,6 +39,7 @@ The user picks one per generation. Each implies a structure, pacing, and tone.
 |---|---|---|---|
 | `hackathon-demo` | 5 | ~75s | hook → problem → build moment → demo → impact |
 | `product-launch` | 6 | ~90s | hook → stakes → reveal → proof → mechanism → CTA |
+| `explainer` | 5 | ~75s | problem → why existing solutions fail → reframe → mechanism → why it matters |
 | `tutorial` | 7 | ~180s | promise → setup → step-by-step (3) → recap → next |
 | `storyline` | 5 | ~120s | character → pain → turning point → journey → payoff |
 | `custom` | per-brief | per-brief | structured by the user's brief |

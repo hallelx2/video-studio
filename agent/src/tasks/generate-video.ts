@@ -36,6 +36,11 @@ const VIDEO_TYPE_META: Record<string, VideoTypeMeta> = {
     durationSec: 90,
     structure: "hook → stakes → reveal → proof → mechanism → CTA",
   },
+  explainer: {
+    scenes: 5,
+    durationSec: 75,
+    structure: "problem → why existing solutions fail → reframe → mechanism → why it matters",
+  },
   tutorial: {
     scenes: 7,
     durationSec: 180,

@@ -101,6 +101,8 @@ function Icon({ kind }: { kind: VideoType }) {
       return <ZapIcon className={wrap} />;
     case "product-launch":
       return <RocketIcon className={wrap} />;
+    case "explainer":
+      return <BulbIcon className={wrap} />;
     case "tutorial":
       return <BookIcon className={wrap} />;
     case "storyline":
@@ -256,6 +258,44 @@ function FilmIcon({ className }: { className?: string }) {
         stroke="var(--color-cinnabar)"
         strokeWidth="1.25"
         fill="none"
+      />
+    </svg>
+  );
+}
+
+function BulbIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 32 32" className={className} aria-hidden>
+      {/* Bulb glass */}
+      <path
+        d="M16 4 C 10.5 4 7 8 7 13 C 7 16.5 8.5 19 10.5 21 L 10.5 23 L 21.5 23 L 21.5 21 C 23.5 19 25 16.5 25 13 C 25 8 21.5 4 16 4 Z"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* Filament — cinnabar, the 'aha' beat */}
+      <path
+        d="M12 13 L 14.5 16 L 17.5 13 L 20 16"
+        stroke="var(--color-cinnabar)"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+      {/* Screw base */}
+      <path
+        d="M11 24 L 21 24 M 12 26 L 20 26 M 13 28 L 19 28"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+      {/* Concept rays — brass, faint */}
+      <path
+        d="M16 1 L 16 2.5 M 4 13 L 5.5 13 M 28 13 L 26.5 13 M 7.5 5 L 8.6 6 M 24.5 5 L 23.4 6"
+        stroke="var(--color-brass)"
+        strokeWidth="1.25"
+        strokeLinecap="round"
       />
     </svg>
   );
