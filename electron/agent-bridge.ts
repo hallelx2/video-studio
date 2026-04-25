@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { app, type BrowserWindow } from "electron";
 import { resolve, join } from "node:path";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync } from "node:fs";
 import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
 
 /**
@@ -45,8 +45,15 @@ export class AgentBridge {
     const orgRoot = config.orgProjectsPath ?? defaultOrgRoot();
     const workspaceRoot = config.workspacePath ?? defaultWorkspaceRoot();
 
+    // CRITICAL on Windows: child_process.spawn fails with ENOENT (which looks like
+    // "executable not found") when the cwd directory doesn't exist. Make sure the
+    // workspace exists before we hand it to spawn.
+    if (!existsSync(workspaceRoot)) {
+      mkdirSync(workspaceRoot, { recursive: true });
+    }
+
     const proc = spawn(
-      process.execPath, // bundled Node (Electron's node)
+      process.execPath, // Electron binary, run as Node via ELECTRON_RUN_AS_NODE
       [
         agentEntry,
         "generate-video",
@@ -60,6 +67,9 @@ export class AgentBridge {
       {
         cwd: workspaceRoot,
         stdio: ["pipe", "pipe", "pipe"],
+        // Critical on Windows: without windowsHide the spawned electron-as-node
+        // process tries to attach a console window which interferes with stdio.
+        windowsHide: true,
         env: {
           // Inherit the user's full env so the Claude CLI can find ~/.claude/ credentials
           ...process.env,
