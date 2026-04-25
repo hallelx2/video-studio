@@ -3,7 +3,7 @@ import {
   type ChildProcess,
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
-import { app, type BrowserWindow } from "electron";
+import { app, Notification, type BrowserWindow } from "electron";
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
@@ -282,6 +282,71 @@ export class AgentBridge {
   private emit(event: AgentEvent): void {
     if (!this.window || this.window.isDestroyed()) return;
     this.window.webContents.send("agent-event", event);
+    this.maybeNotify(event);
+  }
+
+  /**
+   * Fire a system notification on important agent events when the user has
+   * the window backgrounded. Three trigger points:
+   *
+   *   - prompt: agent paused for HITL approval
+   *   - result.success: render finished
+   *   - error (non-recoverable): run died
+   *
+   * Click → focus the window. Notifications during foreground are suppressed
+   * (the user already sees the in-app inline approval card / metrics bar).
+   */
+  private maybeNotify(event: AgentEvent): void {
+    if (!Notification.isSupported()) return;
+    if (!this.window || this.window.isDestroyed()) return;
+    if (this.window.isFocused()) return;
+
+    let title: string | null = null;
+    let body: string | null = null;
+    let urgency: "low" | "normal" | "critical" = "normal";
+
+    if (event.type === "prompt") {
+      title = "Video Studio · approval requested";
+      body = event.question.length > 140 ? event.question.slice(0, 137) + "…" : event.question;
+      urgency = "critical";
+    } else if (event.type === "result") {
+      if (event.status === "success") {
+        title = "Video Studio · render complete";
+        body = event.message ?? "Your video is ready.";
+        urgency = "normal";
+      } else if (event.status === "needs_input") {
+        title = "Video Studio · waiting on you";
+        body = event.message ?? "The agent is paused.";
+        urgency = "critical";
+      } else {
+        title = "Video Studio · run failed";
+        body = event.message ?? "The agent stopped without a render.";
+        urgency = "normal";
+      }
+    } else if (event.type === "error" && event.recoverable === false) {
+      title = "Video Studio · error";
+      body = event.message;
+      urgency = "normal";
+    }
+
+    if (!title || !body) return;
+
+    const notification = new Notification({
+      title,
+      body,
+      silent: false,
+      // Linux only — but ignored elsewhere.
+      urgency,
+    });
+
+    notification.on("click", () => {
+      if (!this.window || this.window.isDestroyed()) return;
+      if (this.window.isMinimized()) this.window.restore();
+      this.window.show();
+      this.window.focus();
+    });
+
+    notification.show();
   }
 }
 

@@ -6,9 +6,11 @@
   "description": "Desktop agent-driven video studio (Electron + Claude Agent SDK + HyperFrames)",
   "main": "electron/dist/main.js",
   "scripts": {
-    "dev": "concurrently -k -n vite,electron -c blue,magenta \"pnpm dev:renderer\" \"pnpm dev:electron\"",
+    "dev": "pnpm dev:setup && concurrently -k -n vite,tsc,electron -c blue,green,magenta \"pnpm dev:renderer\" \"pnpm dev:electron:tsc\" \"pnpm dev:electron:run\"",
+    "dev:setup": "pnpm --filter @video-studio/agent build && tsc -p electron/tsconfig.json",
     "dev:renderer": "vite",
-    "dev:electron": "pnpm --filter @video-studio/agent build && tsc -p electron/tsconfig.json && wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dev:electron:tsc": "tsc -p electron/tsconfig.json -w --preserveWatchOutput",
+    "dev:electron:run": "wait-on tcp:5173 && node scripts/dev-electron.mjs",
     "build": "pnpm --filter @video-studio/agent build && tsc -p electron/tsconfig.json && vite build",
     "bundle": "pnpm build && electron-builder",
     "bundle:win": "pnpm build && electron-builder --win",
