@@ -1,5 +1,14 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { AgentEvent, AppConfig, GenerateRequest, ProjectInfo, StudioBridge } from "./types.js";
+import type {
+  AgentEvent,
+  AppConfig,
+  GenerateRequest,
+  ProjectInfo,
+  SessionFile,
+  SessionMeta,
+  SessionScaffold,
+  StudioBridge,
+} from "./types.js";
 
 /**
  * Renderer-facing API. Exposed via contextBridge as window.studio.
@@ -33,15 +42,25 @@ const bridge: StudioBridge = {
     writeText: (path, content) =>
       ipcRenderer.invoke("fs:write-text", path, content) as Promise<void>,
   },
-  thread: {
-    load: (projectId) =>
-      ipcRenderer.invoke("thread:load", projectId) as Promise<{
-        events: AgentEvent[];
-        updatedAt: number | null;
-      }>,
-    save: (projectId, events) =>
-      ipcRenderer.invoke("thread:save", projectId, events) as Promise<void>,
-    clear: (projectId) => ipcRenderer.invoke("thread:clear", projectId) as Promise<void>,
+  sessions: {
+    list: (projectId) =>
+      ipcRenderer.invoke("sessions:list", projectId) as Promise<SessionMeta[]>,
+    load: (projectId, sessionId) =>
+      ipcRenderer.invoke("sessions:load", projectId, sessionId) as Promise<SessionFile | null>,
+    create: (projectId, scaffold, title) =>
+      ipcRenderer.invoke("sessions:create", projectId, scaffold, title) as Promise<SessionFile>,
+    save: (projectId, sessionId, events, scaffold) =>
+      ipcRenderer.invoke(
+        "sessions:save",
+        projectId,
+        sessionId,
+        events,
+        scaffold
+      ) as Promise<void>,
+    rename: (projectId, sessionId, title) =>
+      ipcRenderer.invoke("sessions:rename", projectId, sessionId, title) as Promise<void>,
+    delete: (projectId, sessionId) =>
+      ipcRenderer.invoke("sessions:delete", projectId, sessionId) as Promise<void>,
   },
   dialog: {
     pickFolder: (title) => ipcRenderer.invoke("dialog:pick-folder", title) as Promise<string | null>,

@@ -8,6 +8,9 @@ import type {
   AppConfig,
   GenerateRequest,
   ProjectInfo,
+  SessionFile,
+  SessionMeta,
+  SessionScaffold,
 } from "../../electron/types.js";
 
 function studio() {
@@ -85,6 +88,48 @@ export async function previewState(): Promise<{
   workspace: string | null;
 }> {
   return studio().preview.state();
+}
+
+// ─── Sessions ──────────────────────────────────────────────────────────────
+
+export async function listSessions(projectId: string): Promise<SessionMeta[]> {
+  return studio().sessions.list(projectId);
+}
+
+export async function loadSession(
+  projectId: string,
+  sessionId: string
+): Promise<SessionFile | null> {
+  return studio().sessions.load(projectId, sessionId);
+}
+
+export async function createSession(
+  projectId: string,
+  scaffold: SessionScaffold,
+  title?: string
+): Promise<SessionFile> {
+  return studio().sessions.create(projectId, scaffold, title);
+}
+
+export async function saveSession(
+  projectId: string,
+  sessionId: string,
+  events: AgentEvent[],
+  scaffold: SessionScaffold
+): Promise<void> {
+  return studio().sessions.save(projectId, sessionId, events, scaffold);
+}
+
+export async function renameSession(
+  projectId: string,
+  sessionId: string,
+  title: string
+): Promise<void> {
+  return studio().sessions.rename(projectId, sessionId, title);
+}
+
+export async function deleteSession(projectId: string, sessionId: string): Promise<void> {
+  return studio().sessions.delete(projectId, sessionId);
 }
 
 /** Subscribe to the agent event stream. Returns an unsubscribe function. */

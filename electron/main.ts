@@ -4,8 +4,20 @@ import { promises as fs } from "node:fs";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
-import { clearThread, loadThread, saveThread } from "./thread-store.js";
-import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
+import {
+  createSession,
+  deleteSession,
+  listSessions,
+  loadSession,
+  renameSession,
+  saveSession,
+} from "./session-store.js";
+import type {
+  AgentEvent,
+  AppConfig,
+  GenerateRequest,
+  SessionScaffold,
+} from "./types.js";
 
 // __dirname is provided by CommonJS — no fileURLToPath needed.
 
@@ -156,14 +168,40 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("preview:state", async () => agent.getPreviewState());
 
-  ipcMain.handle("thread:load", async (_, projectId: string) => loadThread(projectId));
+  ipcMain.handle("sessions:list", async (_, projectId: string) => listSessions(projectId));
 
-  ipcMain.handle("thread:save", async (_, projectId: string, events: AgentEvent[]) => {
-    await saveThread(projectId, events);
-  });
+  ipcMain.handle("sessions:load", async (_, projectId: string, sessionId: string) =>
+    loadSession(projectId, sessionId)
+  );
 
-  ipcMain.handle("thread:clear", async (_, projectId: string) => {
-    await clearThread(projectId);
+  ipcMain.handle(
+    "sessions:create",
+    async (_, projectId: string, scaffold: SessionScaffold, title?: string) =>
+      createSession(projectId, scaffold, title)
+  );
+
+  ipcMain.handle(
+    "sessions:save",
+    async (
+      _,
+      projectId: string,
+      sessionId: string,
+      events: AgentEvent[],
+      scaffold: SessionScaffold
+    ) => {
+      await saveSession(projectId, sessionId, events, scaffold);
+    }
+  );
+
+  ipcMain.handle(
+    "sessions:rename",
+    async (_, projectId: string, sessionId: string, title: string) => {
+      await renameSession(projectId, sessionId, title);
+    }
+  );
+
+  ipcMain.handle("sessions:delete", async (_, projectId: string, sessionId: string) => {
+    await deleteSession(projectId, sessionId);
   });
 
   ipcMain.handle("meta:app-version", async () => app.getVersion());

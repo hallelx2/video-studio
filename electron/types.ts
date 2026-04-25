@@ -242,13 +242,26 @@ export interface StudioBridge {
     /** Atomically write UTF-8 text to a file. Creates parent dirs. */
     writeText(path: string, content: string): Promise<void>;
   };
-  thread: {
-    /** Load the persisted event log for this project. Empty array if none. */
-    load(projectId: string): Promise<{ events: AgentEvent[]; updatedAt: number | null }>;
-    /** Persist the event log for this project. Atomic write. */
-    save(projectId: string, events: AgentEvent[]): Promise<void>;
-    /** Drop the persisted thread for this project. */
-    clear(projectId: string): Promise<void>;
+  sessions: {
+    /** List sessions for a project (most recent first). */
+    list(projectId: string): Promise<SessionMeta[]>;
+    /** Load a single session including its event log. */
+    load(projectId: string, sessionId: string): Promise<SessionFile | null>;
+    /** Create a new session with the given scaffold. */
+    create(
+      projectId: string,
+      scaffold: SessionScaffold,
+      title?: string
+    ): Promise<SessionFile>;
+    /** Save events + scaffold to an existing session. */
+    save(
+      projectId: string,
+      sessionId: string,
+      events: AgentEvent[],
+      scaffold: SessionScaffold
+    ): Promise<void>;
+    rename(projectId: string, sessionId: string, title: string): Promise<void>;
+    delete(projectId: string, sessionId: string): Promise<void>;
   };
   dialog: {
     pickFolder(title?: string): Promise<string | null>;
@@ -269,6 +282,32 @@ export interface StudioBridge {
     appVersion(): Promise<string>;
     platform(): Promise<NodeJS.Platform>;
   };
+}
+
+// ─── Session types (shared between renderer and main) ────────────────────
+// session-store.ts (Node-only) re-uses these definitions. Keeping them in
+// types.ts so the renderer can import without reaching into Node-only code.
+
+export interface SessionScaffold {
+  videoType: VideoType;
+  formats: VideoFormat[];
+  modelId: string;
+}
+
+export interface SessionMeta {
+  id: string;
+  projectId: string;
+  title: string;
+  scaffold: SessionScaffold;
+  createdAt: number;
+  updatedAt: number;
+  eventCount: number;
+}
+
+export interface SessionFile {
+  version: number;
+  meta: SessionMeta;
+  events: AgentEvent[];
 }
 
 declare global {
