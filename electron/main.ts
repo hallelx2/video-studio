@@ -1,12 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
 import type { AppConfig, GenerateRequest } from "./types.js";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// __dirname is provided by CommonJS — no fileURLToPath needed.
 
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
 const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
@@ -46,6 +45,7 @@ function createWindow(): void {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
+    // electron/dist/main.js → ../.. → project root → dist/renderer/index.html
     mainWindow.loadFile(join(__dirname, "..", "..", "dist", "renderer", "index.html"));
   }
 }
