@@ -1,0 +1,34 @@
+node_modules
+dist
+target
+.vscode
+.idea
+
+# Env
+.env
+.env.local
+
+# Tauri
+src-tauri/target
+src-tauri/gen
+src-tauri/binaries/agent-*
+
+# Bun-compiled agent sidecars are 100+ MB each; rebuild with `pnpm sidecar:windows`
+agent/src/system-prompt.generated.ts
+
+# Agent build
+agent/dist
+
+# Studio artifacts
+studio/dist
+studio/output
+studio/public/audio
+studio/public/manifests
+
+# Preserve committed reference assets but ignore user screen recordings
+studio/public/assets/**/screen-recordings
+!studio/public/assets/**/screen-recordings/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,9 @@
+{
+  "hash": "9418f1fa9d97abc070e13e548a47c478ea59c4bd21d0be03e79b9c6d43ae10a1",
+  "voice": "en-US-AndrewNeural",
+  "text": "RAG chunking was the original sin of document retrieval. Vectorless preserves the document tree and lets an LLM agent navigate it.",
+  "rate": 0,
+  "pitch": 0,
+  "bytes": 52992,
+  "generatedAt": "2026-04-14T20:51:36.659Z"
+}
