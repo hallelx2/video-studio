@@ -136,7 +136,7 @@ export type AgentEvent =
       payload?: Record<string, unknown>;
     }
   | { type: "agent_text"; messageId?: string; text: string }
-  | { type: "agent_tool_use"; id: string; tool: string; input: unknown }
+  | { type: "agent_tool_use"; id: string; messageId?: string; tool: string; input: unknown }
   | { type: "agent_tool_result"; id: string; isError?: boolean; text?: string }
   | { type: "agent_log"; level: string; text: string }
   | {

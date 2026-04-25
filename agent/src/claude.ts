@@ -173,6 +173,9 @@ function emitAssistantBlocks(assistantMsg: Record<string, unknown>) {
       emit({
         type: "agent_tool_use",
         id: typeof block.id === "string" ? block.id : `tu_${Date.now()}`,
+        // Propagate the parent assistant message id so the UI can group
+        // consecutive text + tool_use blocks from the same response together.
+        messageId,
         tool: block.name,
         input: block.input,
       });

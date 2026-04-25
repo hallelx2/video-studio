@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn.js";
-import type { Activity, PendingPrompt } from "../../lib/agent-state.js";
+import type { Activity, PendingPrompt, TextActivity } from "../../lib/agent-state.js";
 import { TextCard } from "./TextCard.js";
 import { ToolCallCard } from "./ToolCallCard.js";
 import { ProgressCard, LogCard, ErrorCard, RawCard } from "./MetaCards.js";
 import { UserMessageCard } from "./UserMessageCard.js";
 import { InlineApproval } from "./InlineApproval.js";
+import { ReasoningCard } from "./ReasoningCard.js";
+
+const REASONING_MAX_LEN = 500;
 
 type FilterKey = "all" | "chat" | "tools" | "progress" | "errors";
 
@@ -125,10 +128,15 @@ export function ActivityStream({
               // in the visible list) starts a new turn — render a hairline
               // divider above it so multi-run conversations are scannable.
               const isTurnStart = activity.kind === "user" && i > 0;
+              const asReasoning = isReasoningContext(visible, i);
               return (
                 <li key={activity.id}>
                   {isTurnStart && <TurnDivider />}
-                  {renderActivity(activity)}
+                  {asReasoning ? (
+                    <ReasoningCard activity={activity as TextActivity} />
+                  ) : (
+                    renderActivity(activity)
+                  )}
                 </li>
               );
             })}
@@ -142,6 +150,21 @@ export function ActivityStream({
       </div>
     </div>
   );
+}
+
+/**
+ * Returns true if the activity at index `i` is a TextActivity that should be
+ * rendered as folded reasoning (Hypatia pattern): short text wedged between
+ * two tool calls within the same agent turn. Long text and text outside of
+ * a tool sandwich stay as full TextCard.
+ */
+function isReasoningContext(activities: Activity[], i: number): boolean {
+  const a = activities[i];
+  if (a.kind !== "text") return false;
+  if (a.text.length > REASONING_MAX_LEN) return false;
+  const prev = activities[i - 1];
+  const next = activities[i + 1];
+  return prev?.kind === "tool" && next?.kind === "tool";
 }
 
 function TurnDivider() {

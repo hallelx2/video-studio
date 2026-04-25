@@ -90,6 +90,9 @@ export interface ToolCallActivity {
   kind: "tool";
   id: string;
   ts: number;
+  /** Parent assistant message id, when known. Lets the UI group a single
+   *  assistant response's text + tool blocks into one cohesive message. */
+  messageId?: string;
   toolName: string;
   input: unknown;
   status: "running" | "complete" | "error";
@@ -327,6 +330,7 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
           kind: "tool",
           id: event.id,
           ts,
+          messageId: event.messageId,
           toolName: typeof event.tool === "string" ? event.tool : "unknown",
           input: event.input,
           status: "running",

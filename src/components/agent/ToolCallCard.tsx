@@ -54,13 +54,18 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
             doneText={verbs.done}
             className={cn(
               "shrink-0 font-display text-[15px] font-semibold",
-              isRunning && "text-paper",
+              isRunning && "text-shimmer-cinnabar",
               isError && "text-alarm",
               !isRunning && !isError && "text-paper"
             )}
           />
           {subtitle && (
-            <span className="min-w-0 truncate font-mono text-xs text-paper-mute">
+            <span
+              className={cn(
+                "min-w-0 truncate font-mono text-xs",
+                isRunning ? "text-shimmer" : "text-paper-mute"
+              )}
+            >
               {subtitle}
             </span>
           )}

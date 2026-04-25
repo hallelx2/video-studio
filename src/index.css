@@ -172,3 +172,45 @@ samp {
 .enter-rise {
   animation: fade-rise 0.5s var(--ease-atelier) both;
 }
+
+/* ─── Text shimmer (Hypatia-style streaming cue) ──────────────────────────
+ * Subtle horizontal sweep on text that's currently arriving. Used on
+ * running tool names, in-flight assistant text, etc. NOT on body copy
+ * — keep it for "this is being generated right now" signals only.
+ * ────────────────────────────────────────────────────────────────────────── */
+@keyframes text-shimmer-sweep {
+  0%   { background-position: -150% 0; }
+  100% { background-position:  250% 0; }
+}
+.text-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-paper-mute) 0%,
+    var(--color-paper-mute) 35%,
+    var(--color-paper) 50%,
+    var(--color-paper-mute) 65%,
+    var(--color-paper-mute) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer-sweep 2.4s linear infinite;
+}
+.text-shimmer-cinnabar {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-paper-mute) 0%,
+    var(--color-paper-mute) 35%,
+    var(--color-cinnabar) 50%,
+    var(--color-paper-mute) 65%,
+    var(--color-paper-mute) 100%
+  );
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: text-shimmer-sweep 2.4s linear infinite;
+}
