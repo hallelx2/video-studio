@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   cancelAgent,
   createSession as ipcCreateSession,
@@ -34,7 +34,8 @@ import { ActivityStream } from "../components/agent/ActivityStream.js";
 import { RunMetricsBar } from "../components/agent/RunMetricsBar.js";
 import { Composer } from "../components/agent/Composer.js";
 import { ArtifactPanel } from "../components/agent/ArtifactPanel.js";
-import { SessionSwitcher } from "../components/agent/SessionSwitcher.js";
+import { SessionSidebar } from "../components/agent/SessionSidebar.js";
+import { EmptyComposerState } from "../components/agent/EmptyComposerState.js";
 
 /**
  * Chat-shaped workbench with multiple sessions per project.
@@ -87,28 +88,15 @@ export function WorkbenchRoute() {
       const cfg = await getConfig().catch(() => DEFAULT_CONFIG);
       configRef.current = cfg;
 
-      // List existing sessions
+      // List existing sessions. If none exist, leave currentSessionId null —
+      // the empty state with pills will show. The user creates a session by
+      // clicking a pill or the '+ new session' button in the sidebar.
       const existing = await ipcListSessions(productId).catch(() => [] as SessionMeta[]);
+      setSessions(existing);
 
-      if (existing.length === 0) {
-        // No sessions yet — create one with current config defaults.
-        const scaffold: SessionScaffold = {
-          videoType: cfg.defaultVideoType,
-          formats: cfg.defaultFormats,
-          modelId: cfg.selectedModel ?? DEFAULT_CONFIG.selectedModel,
-        };
-        const created = await ipcCreateSession(productId, scaffold);
-        setSessions([created.meta]);
-        setCurrentSessionId(created.meta.id);
-        setVideoType(scaffold.videoType);
-        setFormats(scaffold.formats);
-        setModelId(scaffold.modelId);
-        setEvents([]);
-      } else {
-        // Load the most recent session
+      if (existing.length > 0) {
         const mostRecent = existing[0];
         const loaded = await ipcLoadSession(productId, mostRecent.id);
-        setSessions(existing);
         setCurrentSessionId(mostRecent.id);
         if (loaded) {
           setVideoType(loaded.meta.scaffold.videoType);
@@ -139,6 +127,29 @@ export function WorkbenchRoute() {
     });
     return unsubscribe;
   }, []);
+
+  // ─── Global keyboard shortcuts ──────────────────────────────────────
+  // ⌘N / Ctrl+N → new session. Suppressed when typing in editable elements.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (e.key.toLowerCase() !== "n") return;
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      e.preventDefault();
+      handleCreateSessionRef.current?.();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+  const handleCreateSessionRef = useRef<(() => void) | null>(null);
 
   // ─── Debounced session save on every event change ───────────────────
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,6 +228,14 @@ export function WorkbenchRoute() {
     briefRef.current = "";
   }, [productId, modelId]);
 
+  // Keep the ref in sync with the latest callback so the global ⌘N keyboard
+  // shortcut (registered once) always invokes the current closure.
+  useEffect(() => {
+    handleCreateSessionRef.current = () => {
+      void handleCreateSession();
+    };
+  }, [handleCreateSession]);
+
   const handleRenameSession = useCallback(
     async (id: string, title: string) => {
       if (!productId) return;
@@ -255,17 +274,20 @@ export function WorkbenchRoute() {
   );
 
   const startRun = useCallback(
-    async (brief: string) => {
+    async (
+      brief: string,
+      overrides?: { videoType?: VideoType; formats?: VideoFormat[]; modelId?: string }
+    ) => {
       if (!productId) return;
       briefRef.current = brief;
       setRunning(true);
       try {
         await generateVideo({
           projectId: productId,
-          videoType,
-          formats,
+          videoType: overrides?.videoType ?? videoType,
+          formats: overrides?.formats ?? formats,
           brief: brief.trim() || undefined,
-          model: modelId,
+          model: overrides?.modelId ?? modelId,
         });
       } catch (err) {
         setEvents((prev) => [
@@ -320,14 +342,46 @@ export function WorkbenchRoute() {
     [agent.pendingPrompt, events, handlePromptResponse, pushUserMessage, startRun]
   );
 
-  /** Build directly from the scaffold — no chat input required. */
-  const handleBuild = useCallback(async () => {
-    if (!productId) return;
-    const typeMeta = VIDEO_TYPES.find((t) => t.id === videoType)!;
-    const synthesized = `Build a ${typeMeta.label.toLowerCase()} for this project (${formats.join(", ")}). Use the standard arc — no extra direction needed.`;
-    pushUserMessage(synthesized, "brief");
-    await startRun(synthesized);
-  }, [productId, videoType, formats, pushUserMessage, startRun]);
+  /**
+   * Pill click in the empty state: pick a video type, set it as the session's
+   * scaffold, create a session if there isn't one, and start the build.
+   * Single-click flow — no further configuration needed.
+   */
+  const handlePickVideoType = useCallback(
+    async (picked: VideoType) => {
+      if (!productId) return;
+      const cfg = configRef.current ?? DEFAULT_CONFIG;
+      const scaffold: SessionScaffold = {
+        videoType: picked,
+        formats: cfg.defaultFormats,
+        modelId: modelId ?? cfg.selectedModel,
+      };
+
+      // If we don't have a current session yet, spin one up.
+      let sessionIdForRun = currentSessionId;
+      if (!sessionIdForRun) {
+        const created = await ipcCreateSession(productId, scaffold);
+        sessionIdForRun = created.meta.id;
+        setSessions((prev) => [created.meta, ...prev]);
+        setCurrentSessionId(sessionIdForRun);
+      }
+
+      setVideoType(picked);
+      setFormats(scaffold.formats);
+
+      // Synthesize a brief and kick off the run. Pass the picked type as an
+      // override so we don't race React's state batching.
+      const typeMeta = VIDEO_TYPES.find((t) => t.id === picked)!;
+      const synthesized = `Build a ${typeMeta.label.toLowerCase()} for this project (${scaffold.formats.join(", ")}). Use the standard arc — no extra direction needed.`;
+      pushUserMessage(synthesized, "brief");
+      await startRun(synthesized, {
+        videoType: picked,
+        formats: scaffold.formats,
+        modelId: scaffold.modelId,
+      });
+    },
+    [productId, currentSessionId, modelId, pushUserMessage, startRun]
+  );
 
   const handleStop = useCallback(async () => {
     await cancelAgent();
@@ -339,139 +393,156 @@ export function WorkbenchRoute() {
   const hasHistory = events.length > 0;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      {/* ─── Header ─────────────────────────────────────────────────────── */}
-      <header className="hairline flex items-baseline justify-between gap-8 border-b px-12 py-7">
-        <div className="flex items-baseline gap-8">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-              workbench
-            </p>
-            <h1 className="display-sm mt-1 text-4xl text-paper">{productId}</h1>
-          </div>
-          <div className="self-end pb-1.5">
-            <SessionSwitcher
-              current={currentSession}
-              sessions={sessions}
-              onSelect={handleSelectSession}
-              onCreateNew={handleCreateSession}
-              onRename={handleRenameSession}
-              onDelete={handleDeleteSession}
-            />
-          </div>
-        </div>
-        <Link
-          to="/"
-          className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
-        >
-          ← all projects
-        </Link>
-      </header>
+    <div className="flex h-full overflow-hidden">
+      {/* ─── Sessions sidebar (always-visible, leftmost) ────────────────── */}
+      <SessionSidebar
+        projectId={productId ?? ""}
+        current={currentSession}
+        sessions={sessions}
+        onSelect={handleSelectSession}
+        onCreateNew={handleCreateSession}
+        onRename={handleRenameSession}
+        onDelete={handleDeleteSession}
+      />
 
-      {/* ─── Body ──────────────────────────────────────────────────────── */}
+      {/* ─── Workbench body (the rest of the columns) ──────────────────── */}
       <div className="flex flex-1 overflow-hidden">
-        <aside className="hairline flex w-[300px] shrink-0 flex-col gap-8 overflow-y-auto border-r px-7 py-8 stagger-children">
-          <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-            scaffold
-          </p>
+        <div className="hairline flex flex-1 flex-col border-r-0">
 
-          <Field eyebrow="01" title="Video type">
-            <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
-              {VIDEO_TYPES.map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => setVideoType(t.id as VideoType)}
-                  disabled={running}
-                  className={cn(
-                    "block bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                    videoType === t.id ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
-                  )}
-                >
-                  <span className="flex items-baseline justify-between">
-                    <span className="flex items-baseline gap-2">
-                      <span
-                        className={
-                          videoType === t.id
-                            ? "h-1.5 w-1.5 rounded-full bg-cinnabar"
-                            : "h-1.5 w-1.5"
-                        }
-                      />
-                      <span className="text-sm font-medium text-paper">{t.label}</span>
-                    </span>
-                    <span className="font-mono text-[10px] tabular text-paper-mute">
-                      {t.defaultScenes}/{t.defaultDuration}s
-                    </span>
-                  </span>
-                </button>
-              ))}
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-paper-mute">{typeMeta.description}</p>
-          </Field>
+      {/* Inner header — session title (only shown when there's a session) */}
+      {currentSession && (
+        <header className="hairline flex items-baseline justify-between gap-8 border-b px-10 py-5">
+          <div className="min-w-0 flex-1">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+              session
+            </p>
+            <h1 className="display-sm mt-1 truncate text-2xl text-paper">
+              {currentSession.title}
+            </h1>
+          </div>
+        </header>
+      )}
 
-          <Field eyebrow="02" title="Formats">
-            <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
-              {FORMAT_OPTIONS.map((f) => {
-                const on = formats.includes(f.id);
-                return (
+      {/* Body — empty state when no events; full workbench once events exist */}
+      {hasHistory ? (
+        <div className="flex flex-1 overflow-hidden">
+          <aside className="hairline flex w-[280px] shrink-0 flex-col gap-8 overflow-y-auto border-r px-6 py-8 stagger-children">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+              scaffold
+            </p>
+
+            <Field eyebrow="01" title="Video type">
+              <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
+                {VIDEO_TYPES.map((t) => (
                   <button
-                    key={f.id}
-                    onClick={() => toggleFormat(f.id)}
+                    key={t.id}
+                    onClick={() => setVideoType(t.id as VideoType)}
                     disabled={running}
                     className={cn(
-                      "flex items-center justify-between bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                      on ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
+                      "block bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                      videoType === t.id ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
                     )}
                   >
-                    <span className="flex items-baseline gap-2">
-                      <span
-                        className={on ? "h-1.5 w-1.5 rounded-full bg-cinnabar" : "h-1.5 w-1.5"}
-                      />
-                      <span className="text-sm font-medium text-paper">{f.label}</span>
-                    </span>
-                    <span className="font-mono text-[10px] tabular text-paper-mute">
-                      {f.aspect}
+                    <span className="flex items-baseline justify-between">
+                      <span className="flex items-baseline gap-2">
+                        <span
+                          className={
+                            videoType === t.id
+                              ? "h-1.5 w-1.5 rounded-full bg-cinnabar"
+                              : "h-1.5 w-1.5"
+                          }
+                        />
+                        <span className="text-sm font-medium text-paper">{t.label}</span>
+                      </span>
+                      <span className="font-mono text-[10px] tabular text-paper-mute">
+                        {t.defaultScenes}/{t.defaultDuration}s
+                      </span>
                     </span>
                   </button>
-                );
-              })}
-            </div>
-          </Field>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-paper-mute">{typeMeta.description}</p>
+            </Field>
 
-          <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-paper-mute/70">
-            click <span className="text-paper">build</span> to start with these defaults, or
-            type into the chat to give a specific brief.
-          </p>
-        </aside>
+            <Field eyebrow="02" title="Formats">
+              <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
+                {FORMAT_OPTIONS.map((f) => {
+                  const on = formats.includes(f.id);
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => toggleFormat(f.id)}
+                      disabled={running}
+                      className={cn(
+                        "flex items-center justify-between bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                        on ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
+                      )}
+                    >
+                      <span className="flex items-baseline gap-2">
+                        <span
+                          className={on ? "h-1.5 w-1.5 rounded-full bg-cinnabar" : "h-1.5 w-1.5"}
+                        />
+                        <span className="text-sm font-medium text-paper">{f.label}</span>
+                      </span>
+                      <span className="font-mono text-[10px] tabular text-paper-mute">
+                        {f.aspect}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
 
-        {/* ─── Chat inspector ──────────────────────────────────────────── */}
-        <section className="flex flex-1 flex-col overflow-hidden">
-          <StageTimeline stages={agent.stages} currentStageId={agent.currentStageId} />
-          <div className="relative flex-1 overflow-hidden">
-            <ActivityStream
-              activities={agent.activities}
-              pendingPrompt={agent.pendingPrompt}
-              onRespondToPrompt={handlePromptResponse}
-            />
-            {!hasHistory && !running && (
-              <EmptyHero
-                typeMeta={typeMeta}
-                project={productId ?? ""}
-                formats={formats}
-                onBuild={handleBuild}
+            <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-paper-mute/70">
+              type into the chat to interrupt mid-run or follow up after a render.
+            </p>
+          </aside>
+
+          <section className="flex flex-1 flex-col overflow-hidden">
+            <StageTimeline stages={agent.stages} currentStageId={agent.currentStageId} />
+            <div className="relative flex-1 overflow-hidden">
+              <ActivityStream
+                activities={agent.activities}
+                pendingPrompt={agent.pendingPrompt}
+                onRespondToPrompt={handlePromptResponse}
               />
-            )}
+            </div>
+            <RunMetricsBar
+              status={agent.status}
+              metrics={agent.metrics}
+              toolCallCount={agent.metrics.toolCallCount}
+              toolCallErrors={agent.metrics.toolCallErrors}
+              assistantBlocks={agent.metrics.assistantBlocks}
+            />
+            <Composer
+              status={agent.status}
+              hasPendingPrompt={!!agent.pendingPrompt}
+              hasHistory={hasHistory}
+              modelId={modelId}
+              onModelChange={handleModelChange}
+              onSubmit={handleComposerSubmit}
+              onStop={handleStop}
+              projectName={productId ?? "this project"}
+            />
+          </section>
+
+          <ArtifactPanel artifacts={agent.artifacts} />
+        </div>
+      ) : (
+        // ─── Empty state (no events yet) ─────────────────────────────────
+        // Just the pill grid + composer. No scaffold rail, no stage timeline,
+        // no metrics bar — the user picks a video type to begin.
+        <section className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex-1 overflow-hidden">
+            <EmptyComposerState
+              projectName={productId ?? "this project"}
+              onPick={handlePickVideoType}
+            />
           </div>
-          <RunMetricsBar
-            status={agent.status}
-            metrics={agent.metrics}
-            toolCallCount={agent.metrics.toolCallCount}
-            toolCallErrors={agent.metrics.toolCallErrors}
-            assistantBlocks={agent.metrics.assistantBlocks}
-          />
           <Composer
             status={agent.status}
             hasPendingPrompt={!!agent.pendingPrompt}
-            hasHistory={hasHistory}
+            hasHistory={false}
             modelId={modelId}
             onModelChange={handleModelChange}
             onSubmit={handleComposerSubmit}
@@ -479,56 +550,7 @@ export function WorkbenchRoute() {
             projectName={productId ?? "this project"}
           />
         </section>
-
-        <ArtifactPanel artifacts={agent.artifacts} />
-      </div>
-    </div>
-  );
-}
-
-function EmptyHero({
-  typeMeta,
-  project,
-  formats,
-  onBuild,
-}: {
-  typeMeta: { label: string; defaultScenes: number; defaultDuration: number };
-  project: string;
-  formats: VideoFormat[];
-  onBuild: () => void | Promise<void>;
-}) {
-  const canBuild = formats.length > 0 && project.length > 0;
-  return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink/95 px-12">
-      <div className="max-w-xl">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-          ready · {project}
-        </p>
-        <p className="display mt-4 text-5xl text-paper">What should we make?</p>
-        <p className="mt-6 text-sm leading-relaxed text-paper-mute">
-          Scaffold is set to a <span className="text-paper">{typeMeta.label.toLowerCase()}</span>{" "}
-          — {typeMeta.defaultScenes} scenes, ~{typeMeta.defaultDuration}s, rendering{" "}
-          <span className="tabular text-paper">{formats.length}</span> format
-          {formats.length === 1 ? "" : "s"}. Hit <span className="text-paper">build</span> to start
-          with these defaults, or type into the chat below to give a specific brief.
-        </p>
-        <div className="mt-8 flex items-baseline gap-6">
-          <button
-            type="button"
-            onClick={onBuild}
-            disabled={!canBuild}
-            className={cn(
-              "rounded-full px-6 py-2.5 text-sm font-medium transition-colors",
-              canBuild
-                ? "bg-paper text-ink hover:bg-paper/90"
-                : "cursor-not-allowed bg-paper-mute/10 text-paper-mute/40"
-            )}
-          >
-            build with these settings
-          </button>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
-            or type a brief below ↓
-          </span>
+      )}
         </div>
       </div>
     </div>
