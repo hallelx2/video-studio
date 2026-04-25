@@ -15,10 +15,20 @@ import { watch, existsSync } from "node:fs";
 import { access } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const distDir = join(root, "electron", "dist");
 const mainJs = join(distDir, "main.js");
+
+// The `electron` npm package, when required from a normal Node process,
+// resolves to the absolute path of its prebuilt binary (electron.exe on
+// Windows, Electron.app/.../Electron on macOS, electron on Linux). Spawning
+// this directly is the canonical pattern — and avoids Windows' EINVAL when
+// trying to spawn `npx.cmd` from Node 22 without shell:true.
+const require = createRequire(import.meta.url);
+/** @type {string} */
+const electronBinary = require("electron");
 
 let electronProc = null;
 let restartTimer = null;
@@ -57,17 +67,22 @@ async function startElectron() {
   if (shuttingDown) return;
 
   console.log("[dev-electron] starting electron…");
-  const env = { ...process.env, VITE_DEV_SERVER_URL: "http://localhost:5173" };
-  electronProc = spawn(
-    process.platform === "win32" ? "npx.cmd" : "npx",
-    ["electron", "."],
-    {
-      cwd: root,
-      stdio: "inherit",
-      shell: false,
-      env,
-    }
-  );
+  // Critical: explicitly DELETE ELECTRON_RUN_AS_NODE from the inherited env.
+  // The agent-bridge sets it when spawning the agent (so the agent runs as
+  // Node), and that var leaks into shells and child processes. If it's set
+  // when we boot electron itself, electron's binary acts like Node and
+  // `require("electron")` returns the path string instead of the app API,
+  // which crashes main.js with "Cannot read properties of undefined (reading
+  // 'requestSingleInstanceLock')".
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  env.VITE_DEV_SERVER_URL = "http://localhost:5173";
+
+  electronProc = spawn(electronBinary, ["."], {
+    cwd: root,
+    stdio: "inherit",
+    env,
+  });
 
   electronProc.on("exit", (code, signal) => {
     // If we killed it for a restart, signal will be set. If the user closed
