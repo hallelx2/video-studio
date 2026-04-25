@@ -19,7 +19,7 @@ import { deriveAgentState } from "../lib/agent-state.js";
 import { StageTimeline } from "../components/agent/StageTimeline.js";
 import { ActivityStream } from "../components/agent/ActivityStream.js";
 import { RunMetricsBar } from "../components/agent/RunMetricsBar.js";
-import { PromptApprovalPanel } from "../components/agent/PromptApprovalPanel.js";
+import { PromptDock } from "../components/agent/PromptDock.js";
 
 /**
  * Workbench — generation surface for one project.
@@ -225,16 +225,11 @@ export function WorkbenchRoute() {
           <StageTimeline stages={agent.stages} currentStageId={agent.currentStageId} />
           <div className="relative flex-1 overflow-hidden">
             <ActivityStream activities={agent.activities} />
-            {agent.pendingPrompt && (
-              <PromptApprovalPanel
-                prompt={agent.pendingPrompt}
-                onRespond={handlePromptResponse}
-              />
-            )}
-            {events.length === 0 && !running && (
-              <EmptyHero typeMeta={typeMeta} />
-            )}
+            {events.length === 0 && !running && <EmptyHero typeMeta={typeMeta} />}
           </div>
+          {agent.pendingPrompt && (
+            <PromptDock prompt={agent.pendingPrompt} onRespond={handlePromptResponse} />
+          )}
           <RunMetricsBar
             status={agent.status}
             metrics={agent.metrics}

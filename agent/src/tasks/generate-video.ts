@@ -111,7 +111,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   emit({
     type: "progress",
     phase: "drafting_script",
-    message: "Drafting script — awaiting your approval",
+    message: "Drafting script",
     progress: 0.25,
   });
 
@@ -138,6 +138,13 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     }
 
     const scriptPreview = await readScriptPreview(scriptPath);
+
+    emit({
+      type: "progress",
+      phase: "awaiting_approval",
+      message: "Script ready — your turn",
+      progress: 0.3,
+    });
 
     const response = await opts.askUser(
       `Approve the ${opts.videoType} script for ${opts.projectId}?`,

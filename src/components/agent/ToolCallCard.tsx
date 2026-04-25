@@ -1,16 +1,23 @@
 import { useState } from "react";
 import { cn } from "../../lib/cn.js";
 import type { ToolCallActivity } from "../../lib/agent-state.js";
+import { ToolStatusTitle } from "./ToolStatusTitle.js";
 
 /**
- * One tool call — paired use + result. Args and output are collapsible since
- * they often run hundreds of lines (Read on a big file, Bash with a long log).
+ * One tool call, OpenCode-trigger-style.
+ *
+ *   Reading… vectorless/README.md                              · 0.4s
+ *
+ * - Title (verb form): animated swap from active to done
+ * - Subtitle: smart-extracted label (path, command, query, etc)
+ * - Trailing meta: elapsed time
+ * - Click row to expand — full args + output
  */
 export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
-  const [argsOpen, setArgsOpen] = useState(false);
-  const [outputOpen, setOutputOpen] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const inputPreview = formatInputPreview(activity.input);
+  const verbs = verbsFor(activity.toolName);
+  const subtitle = extractLabel(activity.input);
   const fullInput =
     typeof activity.input === "string"
       ? activity.input
@@ -19,101 +26,170 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
   const elapsedMs =
     activity.endedAt !== null ? activity.endedAt - activity.ts : Date.now() - activity.ts;
 
+  const isRunning = activity.status === "running";
+  const isError = activity.status === "error";
+
   return (
     <article
       className={cn(
-        "hairline border-l-2 pl-5 pr-2 py-3 transition-colors",
-        activity.status === "running" && "border-l-cinnabar bg-ink-raised/40",
-        activity.status === "complete" && "border-l-brass-line",
-        activity.status === "error" && "border-l-alarm bg-alarm/[0.04]"
+        "transition-colors",
+        isRunning && "bg-ink-raised/40",
+        isError && "bg-alarm/[0.05]"
       )}
     >
-      {/* Header line: tool · status · timing */}
-      <header className="flex items-baseline justify-between gap-3">
-        <div className="flex items-baseline gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-            tool
-          </span>
-          <span className="font-display text-base font-semibold text-paper">
-            {activity.toolName}
-          </span>
-          {activity.status === "running" && (
-            <span className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-              <span className="pulse-cinnabar h-1 w-1 rounded-full bg-cinnabar" />
-              running
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className={cn(
+          "flex w-full items-baseline gap-4 border-l-2 px-4 py-2 text-left transition-colors",
+          isRunning && "border-l-cinnabar",
+          !isRunning && !isError && "border-l-brass-line hover:border-l-brass",
+          isError && "border-l-alarm"
+        )}
+      >
+        {/* Title (active/done verb swap) + subtitle (label) */}
+        <span className="flex min-w-0 flex-1 items-baseline gap-3">
+          <ToolStatusTitle
+            active={isRunning}
+            activeText={verbs.active}
+            doneText={verbs.done}
+            className={cn(
+              "shrink-0 font-display text-[15px] font-semibold",
+              isRunning && "text-paper",
+              isError && "text-alarm",
+              !isRunning && !isError && "text-paper"
+            )}
+          />
+          {subtitle && (
+            <span className="min-w-0 truncate font-mono text-xs text-paper-mute">
+              {subtitle}
             </span>
           )}
-          {activity.status === "error" && (
+        </span>
+
+        {/* Trailing meta: status pill + elapsed */}
+        <span className="flex shrink-0 items-baseline gap-3">
+          {isError && (
             <span className="font-mono text-[10px] uppercase tracking-widest text-alarm">
-              errored
+              error
             </span>
+          )}
+          <span className="font-mono text-[10px] tabular text-paper-mute">
+            {formatMs(elapsedMs)}
+          </span>
+          <span
+            className={cn(
+              "font-mono text-[10px] tabular tracking-widest text-paper-mute/70 transition-transform",
+              open && "rotate-90"
+            )}
+            aria-hidden
+          >
+            ▸
+          </span>
+        </span>
+      </button>
+
+      {/* Expanded details */}
+      {open && (
+        <div className="enter-rise space-y-2 px-6 pb-3 pt-1">
+          {fullInput && fullInput !== "{}" && (
+            <Detail label="args">
+              <pre className="hairline max-h-64 overflow-auto border bg-ink-raised p-3 font-mono text-[11px] leading-relaxed text-paper">
+                {fullInput}
+              </pre>
+            </Detail>
+          )}
+          {activity.output !== null && activity.output.length > 0 && (
+            <Detail label={`output · ${formatBytes(activity.output.length)}`}>
+              <pre
+                className={cn(
+                  "hairline max-h-80 overflow-auto border p-3 font-mono text-[11px] leading-relaxed",
+                  isError
+                    ? "border-alarm/30 bg-alarm/[0.06] text-alarm"
+                    : "bg-ink-raised text-paper"
+                )}
+              >
+                {activity.output}
+              </pre>
+            </Detail>
+          )}
+          {activity.output === null && !isRunning && (
+            <p className="font-mono text-[11px] text-paper-mute/70">(no output captured)</p>
           )}
         </div>
-        <span className="shrink-0 font-mono text-[10px] tabular text-paper-mute">
-          {formatMs(elapsedMs)}
-        </span>
-      </header>
-
-      {/* One-line preview that's always visible */}
-      <p className="mt-2 truncate font-mono text-xs text-paper-mute">{inputPreview}</p>
-
-      {/* Args details — collapsible */}
-      {fullInput && fullInput.length > 0 && (
-        <details
-          open={argsOpen}
-          onToggle={(e) => setArgsOpen((e.target as HTMLDetailsElement).open)}
-          className="mt-2"
-        >
-          <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper">
-            {argsOpen ? "− args" : "+ args"}
-          </summary>
-          <pre className="hairline mt-2 max-h-64 overflow-auto border bg-ink-raised p-3 font-mono text-[11px] leading-relaxed text-paper">
-            {fullInput}
-          </pre>
-        </details>
-      )}
-
-      {/* Output — collapsible, only shown after the call completes */}
-      {activity.output !== null && activity.output.length > 0 && (
-        <details
-          open={outputOpen}
-          onToggle={(e) => setOutputOpen((e.target as HTMLDetailsElement).open)}
-          className="mt-1.5"
-        >
-          <summary className="cursor-pointer font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper">
-            {outputOpen ? "− output" : `+ output · ${formatBytes(activity.output.length)}`}
-          </summary>
-          <pre
-            className={cn(
-              "hairline mt-2 max-h-80 overflow-auto border p-3 font-mono text-[11px] leading-relaxed",
-              activity.status === "error"
-                ? "border-alarm/30 bg-alarm/[0.06] text-alarm"
-                : "bg-ink-raised text-paper"
-            )}
-          >
-            {activity.output}
-          </pre>
-        </details>
       )}
     </article>
   );
 }
 
-function formatInputPreview(input: unknown): string {
-  if (input === null || input === undefined) return "(no args)";
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+// ─── Verb mapping for known tools ──────────────────────────────────────────
+// Active form ends with an em-dash + ellipsis to feel in-progress.
+// Done form is a plain past-tense verb.
+
+interface Verbs {
+  active: string;
+  done: string;
+}
+
+const VERBS: Record<string, Verbs> = {
+  Bash: { active: "Running…", done: "Ran" },
+  Read: { active: "Reading…", done: "Read" },
+  Write: { active: "Writing…", done: "Wrote" },
+  Edit: { active: "Editing…", done: "Edited" },
+  Glob: { active: "Finding…", done: "Found" },
+  Grep: { active: "Searching…", done: "Searched" },
+  WebFetch: { active: "Fetching…", done: "Fetched" },
+  WebSearch: { active: "Searching…", done: "Searched" },
+  Skill: { active: "Loading skill…", done: "Loaded skill" },
+  TodoWrite: { active: "Planning…", done: "Planned" },
+  NotebookEdit: { active: "Editing notebook…", done: "Edited notebook" },
+};
+
+function verbsFor(toolName: string): Verbs {
+  if (VERBS[toolName]) return VERBS[toolName];
+  return { active: `${toolName}…`, done: toolName };
+}
+
+// ─── Smart label extraction (OpenCode pattern) ────────────────────────────
+// Try a list of common keys in priority order. First non-empty wins.
+
+const LABEL_KEYS = [
+  "command",
+  "file_path",
+  "filePath",
+  "path",
+  "pattern",
+  "query",
+  "url",
+  "description",
+  "skill",
+  "name",
+  "prompt",
+] as const;
+
+function extractLabel(input: unknown): string | null {
+  if (input === null || input === undefined) return null;
   if (typeof input === "string") return input;
-  if (typeof input === "object") {
-    const obj = input as Record<string, unknown>;
-    // Common Claude tool args — surface the most important field
-    if ("command" in obj && typeof obj.command === "string") return obj.command;
-    if ("file_path" in obj && typeof obj.file_path === "string") return obj.file_path;
-    if ("path" in obj && typeof obj.path === "string") return obj.path;
-    if ("pattern" in obj && typeof obj.pattern === "string") return obj.pattern;
-    if ("url" in obj && typeof obj.url === "string") return obj.url;
-    if ("prompt" in obj && typeof obj.prompt === "string") return obj.prompt;
-    return JSON.stringify(obj);
+  if (typeof input !== "object") return String(input);
+
+  const obj = input as Record<string, unknown>;
+  for (const key of LABEL_KEYS) {
+    const v = obj[key];
+    if (typeof v === "string" && v.length > 0) return v;
   }
-  return String(input);
+  // Last-resort: stringify but truncate
+  const json = JSON.stringify(obj);
+  return json.length > 80 ? json.slice(0, 77) + "…" : json;
 }
 
 function formatMs(ms: number): string {

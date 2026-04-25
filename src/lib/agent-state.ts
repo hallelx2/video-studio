@@ -35,6 +35,7 @@ const PHASE_TO_STAGE: Record<string, StageId> = {
   design_resolved: "read",
   drafting_script: "script",
   revising_script: "script",
+  awaiting_approval: "script",
   narration: "narration",
   composing: "compose",
   rendering: "render",
