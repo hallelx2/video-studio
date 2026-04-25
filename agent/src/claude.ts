@@ -12,6 +12,8 @@ export interface RunAgentOptions {
   cwd: string;
   /** Environment overrides passed to child processes spawned by the agent */
   env?: Record<string, string>;
+  /** Model id to drive this run. Falls through to whatever the SDK / CLI default is. */
+  model?: string;
 }
 
 /**
@@ -103,6 +105,8 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       env: opts.env,
       includePartialMessages: false,
       pathToClaudeCodeExecutable: claudePath,
+      // Per-run model override. The SDK passes this through to /v1/messages.
+      ...(opts.model ? { model: opts.model } : {}),
     },
   });
 

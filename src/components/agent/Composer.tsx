@@ -1,19 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn.js";
 import type { RunStatus } from "../../lib/agent-state.js";
+import { ModelPicker } from "./ModelPicker.js";
 
 /**
- * Chat-style composer at the bottom of the workbench. State-aware — the
- * placeholder, hint, and submit semantics change based on what the agent is
- * doing. Always visible. Always available to interrupt.
+ * Chat composer — shadcn-style refined, no aggressive border colors.
  *
- * Behaviors:
- *   idle / complete         submit → start a new run with the typed brief
- *   running (no prompt)     submit → cancel current run, restart with combined brief
- *   awaiting_input          submit → respond to the pending prompt as revision notes
- *   error                   submit → start a fresh run
+ *   ┌───────────────────────────────────────────────────────────┐
+ *   │ [Claude Opus 4.7 ▼]                                       │
+ *   │                                                           │
+ *   │ <textarea — type here…>                                   │
+ *   │                                                           │
+ *   │ hint                                  ⌘⏎ send  [send →]   │
+ *   └───────────────────────────────────────────────────────────┘
  *
- * Stop button always visible while running. ⌘⏎ submits.
+ * State-aware behavior (placeholder + send semantics):
+ *   idle / complete   → submit starts a fresh run
+ *   running           → submit interrupts and restarts with combined brief
+ *   awaiting_input    → submit becomes revision notes for the pending prompt
+ *   error             → submit starts a fresh run
+ *
+ * Stop button shows next to send while running. ⌘⏎ submits, ⌘. stops.
  */
 
 export type ComposerMode = "brief" | "interrupt" | "revision" | "follow-up";
@@ -21,24 +28,25 @@ export type ComposerMode = "brief" | "interrupt" | "revision" | "follow-up";
 interface ComposerProps {
   status: RunStatus;
   hasPendingPrompt: boolean;
-  /** Has the user run anything yet in this workbench session? */
   hasHistory: boolean;
+  modelId: string;
+  onModelChange: (id: string) => void;
   onSubmit: (text: string) => void | Promise<void>;
   onStop: () => void | Promise<void>;
-  /** Project name used in the placeholder copy. */
   projectName: string;
 }
 
 export function Composer(props: ComposerProps) {
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [focused, setFocused] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const mode = deriveMode(props.status, props.hasPendingPrompt, props.hasHistory);
   const placeholder = placeholderFor(mode, props.projectName);
   const hint = hintFor(mode);
 
-  // Auto-grow the textarea up to ~6 rows.
+  // Auto-grow up to ~6 rows.
   useEffect(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -47,6 +55,7 @@ export function Composer(props: ComposerProps) {
   }, [value]);
 
   const canSubmit = value.trim().length > 0 && !submitting;
+  const showStop = props.status === "running" || props.status === "awaiting_input";
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -57,7 +66,6 @@ export function Composer(props: ComposerProps) {
       await props.onSubmit(text);
     } finally {
       setSubmitting(false);
-      // Re-focus so the user can keep typing.
       requestAnimationFrame(() => textareaRef.current?.focus());
     }
   };
@@ -68,67 +76,81 @@ export function Composer(props: ComposerProps) {
       handleSubmit();
       return;
     }
-    // ⌘. or Ctrl+. cancels a running agent (terminal convention).
     if ((e.metaKey || e.ctrlKey) && e.key === ".") {
       e.preventDefault();
-      if (props.status === "running" || props.status === "awaiting_input") {
-        props.onStop();
-      }
+      if (showStop) props.onStop();
     }
   };
 
-  const showStop = props.status === "running" || props.status === "awaiting_input";
-
   return (
-    <div className="hairline border-t bg-ink">
-      <div className="flex items-end gap-4 px-12 py-4">
-        <div className="flex-1">
+    <div className="bg-ink px-10 pb-5 pt-3">
+      {/* shadcn-style: single neutral border, soft ring on focus, no mode-tinted color */}
+      <div
+        className={cn(
+          "rounded-2xl border bg-ink-raised transition-colors",
+          focused
+            ? "border-paper-mute/30 ring-2 ring-paper-mute/10"
+            : "border-paper-mute/15 hover:border-paper-mute/25"
+        )}
+      >
+        {/* Top row: model picker (and any future toolbar items) */}
+        <div className="flex items-center justify-between border-b border-paper-mute/10 px-4 py-2.5">
+          <ModelPicker modelId={props.modelId} onChange={props.onModelChange} />
+          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+            {modeLabel(mode)}
+          </span>
+        </div>
+
+        {/* Textarea */}
+        <div className="px-5 py-3.5">
           <textarea
             ref={textareaRef}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             placeholder={placeholder}
             rows={1}
             disabled={submitting}
             className={cn(
-              "block w-full resize-none bg-transparent font-sans text-base leading-relaxed text-paper placeholder:text-paper-mute/60 focus:outline-none",
+              "block w-full resize-none bg-transparent font-sans text-base leading-relaxed text-paper placeholder:text-paper-mute/55 focus:outline-none",
               "min-h-[24px]"
             )}
           />
-          <div className="mt-2 flex items-baseline justify-between gap-4">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
-              {hint}
-            </span>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/50">
-              ⌘⏎ send
-              {showStop && <span className="ml-3">⌘. stop</span>}
-            </span>
-          </div>
         </div>
 
-        <div className="flex shrink-0 items-center gap-6 self-start pt-1">
-          {showStop && (
-            <button
-              onClick={() => props.onStop()}
-              className="font-mono text-[10px] uppercase tracking-widest text-alarm transition-colors hover:text-paper"
-              title="Stop the agent (⌘.)"
-            >
-              stop
-            </button>
-          )}
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className={cn(
-              "border-b pb-1 text-sm font-medium transition-colors",
-              canSubmit
-                ? "border-cinnabar text-cinnabar hover:text-paper"
-                : "cursor-not-allowed border-paper-mute/30 text-paper-mute/40"
+        {/* Bottom row: hint on the left, actions on the right */}
+        <div className="flex items-center justify-between gap-4 border-t border-paper-mute/10 px-4 py-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/65">
+            {hint}
+          </span>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/45">
+              ⌘⏎
+            </span>
+            {showStop && (
+              <button
+                onClick={() => props.onStop()}
+                className="rounded-md border border-paper-mute/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:border-paper-mute/30 hover:text-paper"
+                title="Stop the agent (⌘.)"
+              >
+                stop
+              </button>
             )}
-          >
-            {submitButtonLabel(mode)}
-          </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className={cn(
+                "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
+                canSubmit
+                  ? "bg-paper text-ink hover:bg-paper/90"
+                  : "cursor-not-allowed bg-paper-mute/10 text-paper-mute/40"
+              )}
+            >
+              {submitButtonLabel(mode)}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -169,15 +191,28 @@ function hintFor(mode: ComposerMode): string {
   }
 }
 
+function modeLabel(mode: ComposerMode): string {
+  switch (mode) {
+    case "brief":
+      return "new brief";
+    case "interrupt":
+      return "interrupt";
+    case "revision":
+      return "revision";
+    case "follow-up":
+      return "follow-up";
+  }
+}
+
 function submitButtonLabel(mode: ComposerMode): string {
   switch (mode) {
     case "brief":
-      return "send →";
+      return "send";
     case "interrupt":
-      return "interrupt →";
+      return "interrupt";
     case "revision":
-      return "revise →";
+      return "revise";
     case "follow-up":
-      return "send →";
+      return "send";
   }
 }

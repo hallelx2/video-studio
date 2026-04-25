@@ -9,12 +9,15 @@ export {
   VOICE_OPTIONS,
   FORMAT_OPTIONS,
   VIDEO_TYPES,
+  MODEL_OPTIONS,
+  findModel,
 } from "../../electron/types.js";
 
 export type {
   AgentEvent,
   AppConfig,
   GenerateRequest,
+  ModelOption,
   ProjectInfo,
   StudioBridge,
   VideoFormat,

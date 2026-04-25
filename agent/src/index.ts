@@ -8,6 +8,7 @@ type AgentCommand =
       videoType: string;
       formats: string[];
       brief: string;
+      model?: string;
     }
   | { type: "list-projects" };
 
@@ -97,6 +98,7 @@ async function main(): Promise<void> {
           videoType: command.videoType,
           formats: command.formats,
           brief: command.brief,
+          model: command.model,
           systemPrompt: SYSTEM_PROMPT,
           askUser,
         });
@@ -137,8 +139,10 @@ function parseCommand(args: string[]): AgentCommand | null {
         ? (parsed.formats as string[])
         : ["linkedin"];
       const brief = String(parsed.brief ?? "");
+      const model =
+        typeof parsed.model === "string" && parsed.model.length > 0 ? parsed.model : undefined;
       if (!projectId) return null;
-      return { type: "generate-video", projectId, videoType, formats, brief };
+      return { type: "generate-video", projectId, videoType, formats, brief, model };
     } catch {
       return null;
     }

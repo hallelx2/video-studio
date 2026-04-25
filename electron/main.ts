@@ -4,7 +4,8 @@ import { promises as fs } from "node:fs";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
-import type { AppConfig, GenerateRequest } from "./types.js";
+import { clearThread, loadThread, saveThread } from "./thread-store.js";
+import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
 
 // __dirname is provided by CommonJS — no fileURLToPath needed.
 
@@ -154,6 +155,16 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle("preview:state", async () => agent.getPreviewState());
+
+  ipcMain.handle("thread:load", async (_, projectId: string) => loadThread(projectId));
+
+  ipcMain.handle("thread:save", async (_, projectId: string, events: AgentEvent[]) => {
+    await saveThread(projectId, events);
+  });
+
+  ipcMain.handle("thread:clear", async (_, projectId: string) => {
+    await clearThread(projectId);
+  });
 
   ipcMain.handle("meta:app-version", async () => app.getVersion());
 

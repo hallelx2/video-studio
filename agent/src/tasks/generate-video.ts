@@ -8,6 +8,8 @@ export interface GenerateVideoOptions {
   videoType: string;
   formats: string[];
   brief: string;
+  /** Optional model override for this run. Threaded into runAgent → SDK. */
+  model?: string;
   systemPrompt: string;
   /** Emit a prompt event and await the user's response. */
   askUser: (
@@ -105,6 +107,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     systemPrompt: opts.systemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+    model: opts.model,
   });
 
   // ─── Stage 3: Script draft + HARD GATE ─────────────────────────────────
@@ -224,6 +227,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     systemPrompt: opts.systemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+    model: opts.model,
   });
 
   // ─── Stage 5: HyperFrames composition (per aspect ratio) ───────────────
@@ -245,6 +249,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     systemPrompt: opts.systemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+    model: opts.model,
   });
 
   // ─── Compose-approval gate: render now, preview first, or revise ───────
@@ -344,6 +349,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     systemPrompt: opts.systemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+    model: opts.model,
   });
 
   // ─── Done ───────────────────────────────────────────────────────────────

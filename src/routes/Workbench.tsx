@@ -7,12 +7,15 @@ import {
   isAgentRunning,
   onAgentEvent,
   respondToPrompt,
+  saveConfig,
   stopPreview,
 } from "../lib/agent-client.js";
 import {
+  DEFAULT_CONFIG,
   FORMAT_OPTIONS,
   VIDEO_TYPES,
   type AgentEvent,
+  type AppConfig,
   type VideoFormat,
   type VideoType,
 } from "../lib/types.js";
@@ -44,6 +47,10 @@ export function WorkbenchRoute() {
 
   const [videoType, setVideoType] = useState<VideoType>("product-launch");
   const [formats, setFormats] = useState<VideoFormat[]>(["linkedin", "x"]);
+  const [modelId, setModelId] = useState<string>(DEFAULT_CONFIG.selectedModel);
+  // Hold a reference to the latest config so we can persist updates without
+  // racing each other.
+  const configRef = useRef<AppConfig | null>(null);
 
   /** Brief carried across runs — the "context" the agent reads when invoked. */
   const briefRef = useRef<string>("");
@@ -52,13 +59,13 @@ export function WorkbenchRoute() {
   const [running, setRunning] = useState(false);
 
   // Hydrate defaults from config + sync with the bridge's actual run state.
-  // The local `running` flag can drift if the renderer remounts (HMR, route
-  // changes) while the main-process bridge still has a live child.
   useEffect(() => {
     getConfig()
       .then((cfg) => {
+        configRef.current = cfg;
         setVideoType(cfg.defaultVideoType);
         setFormats(cfg.defaultFormats);
+        setModelId(cfg.selectedModel ?? DEFAULT_CONFIG.selectedModel);
       })
       .catch(() => undefined);
     isAgentRunning()
@@ -66,6 +73,14 @@ export function WorkbenchRoute() {
         if (r) setRunning(true);
       })
       .catch(() => undefined);
+  }, []);
+
+  // Persist model choice whenever it changes — survives app restarts.
+  const handleModelChange = useCallback((id: string) => {
+    setModelId(id);
+    const next = { ...(configRef.current ?? DEFAULT_CONFIG), selectedModel: id };
+    configRef.current = next;
+    saveConfig(next).catch(() => undefined);
   }, []);
 
   // Subscribe to agent events.
@@ -104,6 +119,7 @@ export function WorkbenchRoute() {
           videoType,
           formats,
           brief: brief.trim() || undefined,
+          model: modelId,
         });
       } catch (err) {
         setEvents((prev) => [
@@ -113,7 +129,7 @@ export function WorkbenchRoute() {
         setRunning(false);
       }
     },
-    [productId, videoType, formats]
+    [productId, videoType, formats, modelId]
   );
 
   /** Respond to the agent's pending prompt. Free text becomes revision notes. */
@@ -294,6 +310,8 @@ export function WorkbenchRoute() {
             status={agent.status}
             hasPendingPrompt={!!agent.pendingPrompt}
             hasHistory={hasHistory}
+            modelId={modelId}
+            onModelChange={handleModelChange}
             onSubmit={handleComposerSubmit}
             onStop={handleStop}
             projectName={productId ?? "this project"}

@@ -33,6 +33,16 @@ const bridge: StudioBridge = {
     writeText: (path, content) =>
       ipcRenderer.invoke("fs:write-text", path, content) as Promise<void>,
   },
+  thread: {
+    load: (projectId) =>
+      ipcRenderer.invoke("thread:load", projectId) as Promise<{
+        events: AgentEvent[];
+        updatedAt: number | null;
+      }>,
+    save: (projectId, events) =>
+      ipcRenderer.invoke("thread:save", projectId, events) as Promise<void>,
+    clear: (projectId) => ipcRenderer.invoke("thread:clear", projectId) as Promise<void>,
+  },
   dialog: {
     pickFolder: (title) => ipcRenderer.invoke("dialog:pick-folder", title) as Promise<string | null>,
   },

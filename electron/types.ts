@@ -71,6 +71,8 @@ export interface AppConfig {
   ttsVoice: string;
   defaultFormats: VideoFormat[];
   defaultVideoType: VideoType;
+  /** Model id passed to the Claude Agent SDK on every run. */
+  selectedModel: string;
   onboardingComplete: boolean;
 }
 
@@ -80,8 +82,61 @@ export const DEFAULT_CONFIG: AppConfig = {
   ttsVoice: "af_nova",
   defaultFormats: ["linkedin", "x"],
   defaultVideoType: "product-launch",
+  selectedModel: "claude-opus-4-7",
   onboardingComplete: false,
 };
+
+/** Models the user can pick. The first id is the default. */
+export interface ModelOption {
+  id: string;
+  family: "opus" | "sonnet" | "haiku";
+  label: string;
+  description: string;
+  /** 1-indexed; rendered as Ctrl+N shortcut next to the row. */
+  shortcut: number;
+}
+
+export const MODEL_OPTIONS: ModelOption[] = [
+  {
+    id: "claude-opus-4-7",
+    family: "opus",
+    label: "Claude Opus 4.7",
+    description: "Most capable. Best reasoning, slowest, highest cost.",
+    shortcut: 1,
+  },
+  {
+    id: "claude-opus-4-6",
+    family: "opus",
+    label: "Claude Opus 4.6",
+    description: "Prior Opus generation. Stable, well-tuned.",
+    shortcut: 2,
+  },
+  {
+    id: "claude-opus-4-5",
+    family: "opus",
+    label: "Claude Opus 4.5",
+    description: "Older Opus. Use for cost-aware long runs.",
+    shortcut: 3,
+  },
+  {
+    id: "claude-sonnet-4-6",
+    family: "sonnet",
+    label: "Claude Sonnet 4.6",
+    description: "Balanced. Faster than Opus, often good enough.",
+    shortcut: 4,
+  },
+  {
+    id: "claude-haiku-4-5",
+    family: "haiku",
+    label: "Claude Haiku 4.5",
+    description: "Fastest. Use for cheap, simple jobs.",
+    shortcut: 5,
+  },
+];
+
+export function findModel(id: string): ModelOption | undefined {
+  return MODEL_OPTIONS.find((m) => m.id === id);
+}
 
 /** Kokoro voices shipped with HyperFrames. */
 export const VOICE_OPTIONS: Array<{ id: string; label: string; description: string }> = [
@@ -109,6 +164,8 @@ export interface GenerateRequest {
   formats: VideoFormat[];
   /** User-supplied brief / extra direction. Optional for non-custom video types. */
   brief?: string;
+  /** Model id to drive the agent with. Falls back to config.selectedModel. */
+  model?: string;
 }
 
 export interface UsageInfo {
@@ -184,6 +241,14 @@ export interface StudioBridge {
     readText(path: string): Promise<string | null>;
     /** Atomically write UTF-8 text to a file. Creates parent dirs. */
     writeText(path: string, content: string): Promise<void>;
+  };
+  thread: {
+    /** Load the persisted event log for this project. Empty array if none. */
+    load(projectId: string): Promise<{ events: AgentEvent[]; updatedAt: number | null }>;
+    /** Persist the event log for this project. Atomic write. */
+    save(projectId: string, events: AgentEvent[]): Promise<void>;
+    /** Drop the persisted thread for this project. */
+    clear(projectId: string): Promise<void>;
   };
   dialog: {
     pickFolder(title?: string): Promise<string | null>;

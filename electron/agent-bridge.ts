@@ -156,6 +156,8 @@ export class AgentBridge {
           videoType: req.videoType,
           formats: req.formats,
           brief: req.brief ?? "",
+          // Per-run model override, falling back to the persisted config.
+          model: req.model ?? config.selectedModel,
         }),
       ],
       {
@@ -171,6 +173,7 @@ export class AgentBridge {
           ORG_PROJECTS_PATH: orgRoot,
           WORKSPACE_PATH: workspaceRoot,
           TTS_VOICE: config.ttsVoice,
+          CLAUDE_MODEL: req.model ?? config.selectedModel,
         },
       }
     );
