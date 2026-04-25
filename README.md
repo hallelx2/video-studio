@@ -1,121 +1,143 @@
 # Video Studio
 
-> Agent-driven desktop video generator for SaaS product launches.
-> Built on Tauri 2 + Claude Agent SDK + Remotion + edge-tts.
+> Agent-driven desktop video generator.
+> Built on **Electron + Claude Agent SDK + HyperFrames + Kokoro TTS**.
 > Uses your local Claude subscription — no API key billing. No TTS billing either.
 
 ## What it does
 
-Pick a product from your `organisation-projects/` folder, hit **Generate**, and the agent:
+Pick a project from your `organisation-projects/` folder, pick the kind of video you want — **hackathon demo · product launch · tutorial · storyline · custom** — and the agent:
 
-1. Reads the product's README + IMPROVEMENTS + launch post
-2. Drafts a 6-scene script in a senior-founder voice
-3. Gates on your approval before generating voiceover
-4. Generates narration via Microsoft Edge Read Aloud (free, no API key, cached by text hash)
-5. Writes a Remotion composition with Geist-style visuals
-6. Renders multi-format MP4s (LinkedIn square, X landscape, YouTube, hero)
-7. Shows you the live tool-call stream the whole time
+1. Reads the project's README, IMPROVEMENTS, launch posts, and any in-folder DESIGN.md
+2. Resolves the visual identity (project DESIGN.md → forks the global Atelier Noir DESIGN.md)
+3. Drafts a script in a senior-founder voice
+4. **Pauses on a hard gate** for your approval (with a revision loop)
+5. Generates narration via `npx hyperframes tts` (Kokoro-82M, free, offline)
+6. Authors a HyperFrames composition (HTML + GSAP) per requested aspect ratio
+7. Lints + validates contrast, then renders MP4s via `npx hyperframes render`
+8. Streams every tool call live so you can watch and intervene
 
-Zero billing — the agent uses your Claude Pro/Max subscription via the SDK's auto-detected local credentials, and edge-tts is free with no quotas.
+Zero billing — agent uses your Claude Pro/Max subscription, Kokoro is free.
 
-## Prerequisites
+## Stack
 
-- **Node 20+**, **pnpm 9+** — `corepack enable && corepack prepare pnpm@9.15.0 --activate`
-- **Bun 1.2+** — `npm i -g bun` (used to compile the agent sidecar into a self-contained executable)
-- **Rust** — `rustup` from https://rustup.rs
-- **Tauri 2 system deps** — see https://tauri.app/start/prerequisites
-- **Claude Code CLI** — `npm i -g @anthropic-ai/claude-code` and run `claude login` once
-
-## First-time setup
-
-```bash
-cd C:\Users\HomePC\Documents\organisation-projects\video-studio
-
-# 1. Install workspace dependencies
-pnpm install
-
-# 2. Copy env template — defaults are fine for dev
-cp .env.example .env
-
-# 3. Compile the agent sidecar to a self-contained binary (Bun)
-pnpm sidecar:windows   # or sidecar:macos / sidecar:linux
-
-# 4. Run the desktop app
-pnpm dev
-```
-
-First `pnpm dev` takes ~2 minutes (Rust compile). Subsequent runs are fast.
-
-## Building a distributable installer
-
-```bash
-pnpm bundle
-```
-
-This compiles the agent with Bun, produces a Windows `.msi` + `.exe`, and includes
-the agent sidecar binary inside the installer. Output lands in
-`src-tauri/target/release/bundle/`. Cross-platform variants:
-
-```bash
-pnpm bundle:macos    # produces .dmg + .app
-pnpm bundle:linux    # produces .deb + .AppImage
-```
-
-The bundled installer runs without Bun, Node, or pnpm on the user's machine —
-the only external dep is the `claude` CLI for subscription auth.
+| Layer | Tech |
+|---|---|
+| Desktop shell | **Electron 33** (CommonJS main, ESM renderer) |
+| UI | **React 19 + Vite 8 + Tailwind v4** |
+| Agent | Node child process running **Claude Agent SDK**, NDJSON over stdio |
+| Video engine | **HyperFrames** (HTML + GSAP → MP4) |
+| TTS | **Kokoro-82M** via `npx hyperframes tts` |
+| Visual identity | **Atelier Noir** — see `DESIGN.md` |
 
 ## Architecture
 
 ```
-video-studio/
-├── src-tauri/         Rust backend (Tauri 2)
-├── src/               React + Vite + Tailwind frontend (the desktop UI)
-├── agent/             Node sidecar — Claude Agent SDK wrapper
-│   ├── src/
-│   └── prompts/       Master system prompt + style guides
-├── studio/            Remotion workspace — scenes, compositions, assets
-│   ├── src/
-│   └── public/
-└── docs/              Architecture, system prompts, skills reference
+┌─────────────────────────────────────────────────────────────┐
+│  Electron BrowserWindow                                     │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  React renderer (Vite)                                │  │
+│  │  · Onboarding · Projects · Workbench · Settings       │  │
+│  │  · TopChrome · TabStrip · RenderProgress · Pulse     │  │
+│  └──────────────────┬───────────────────────────────────┘  │
+│                     │ window.studio.* (typed contextBridge) │
+│  ┌──────────────────▼───────────────────────────────────┐  │
+│  │  Electron main process (CJS)                          │  │
+│  │  · agent-bridge: spawn agent, parse NDJSON            │  │
+│  │  · projects:    scan organisation-projects/          │  │
+│  │  · config:      load/save <userData>/config.json     │  │
+│  └──────────────────┬───────────────────────────────────┘  │
+└─────────────────────┼──────────────────────────────────────┘
+                      │ child_process + stdio (JSONL)
+┌─────────────────────▼──────────────────────────────────────┐
+│  Node agent (agent/dist/index.js)                           │
+│  · Claude Agent SDK against ~/.claude/ local credentials    │
+│  · Six-stage pipeline: read → DESIGN → script → tts →       │
+│    compose → lint+validate → render                         │
+│  · Spawns: npx hyperframes init / tts / lint / render       │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**Three processes at runtime:**
-1. Tauri (Rust) owns the window + filesystem + spawns the sidecar
-2. Node sidecar (long-running) runs the Claude Agent SDK and streams tool calls over stdio
-3. Remotion CLI (short-lived, spawned by sidecar) renders the actual MP4s
+## Visual identity
 
-## How the agent uses your local Claude
+The desktop UI and the default video aesthetic are governed by [`DESIGN.md`](./DESIGN.md). Read it before changing colours, fonts, motion, or layout language. **Both the `frontend-design` skill and the `hyperframes` skill enforce it as a hard gate** — every UI choice and every video composition must trace back to the file.
 
-The agent sidecar imports `@anthropic-ai/claude-agent-sdk` with **no `ANTHROPIC_API_KEY` in the environment**. The SDK auto-detects your Claude Code login at `~/.claude/` and routes requests through your Pro/Max subscription. Every tool call is streamed back to the Tauri frontend as a live progress event.
+Per-project brands fork it: if a project has its own `DESIGN.md`, the agent uses that instead.
 
-The agent also automatically loads skills from `~/.claude/skills/` — specifically:
+## Prerequisites
 
-- `remotion-best-practices`, `create-remotion-geist`, `remotion-ads`, `remotion-bits`, `remotion-animation`
-- `elevenlabs-remotion`, `text-to-speech`, `sound-effects`, `music`
-- `frontend-design`, `canvas-design`, `web-design-guidelines`
-- `ffmpeg`
+- **Node 20+** — `corepack enable && corepack prepare pnpm@9.15.0 --activate`
+- **FFmpeg** — required by HyperFrames render (https://ffmpeg.org/download.html)
+- **Claude Code CLI** — `npm i -g @anthropic-ai/claude-code` then `claude login`
+- That's it. No Rust, no Bun, no API keys, no billing surface.
 
-See `agent/prompts/system.md` for the full brief the agent runs against.
+## First-time setup
+
+```powershell
+cd C:\Users\HomePC\Documents\organisation-projects\video-studio
+pnpm install
+pnpm dev
+```
+
+`pnpm dev` runs Vite + the Electron main process concurrently. First launch downloads the Electron binary (~100 MB).
+
+The first time you launch, you'll see an Onboarding flow — pick your projects folder and a default Kokoro voice.
 
 ## Daily use
 
-```bash
-pnpm dev                         # launches desktop app
+```powershell
+pnpm dev
 ```
 
 In the UI:
-1. Pick a product from the sidebar
-2. Pick format(s) — default: linkedin + x
-3. Hit **Generate**
-4. Watch the agent stream, approve the script, wait for render
-5. Preview the MP4, hit **Re-render** to iterate
+1. Pick a project from the left rail
+2. Open the workbench
+3. Pick a video type, formats, and (optionally) write a brief
+4. Hit **Generate video**
+5. Watch the agent stream
+6. Approve the script when prompted (or request changes — up to 5 revision rounds)
+7. Preview the rendered MP4s in `<userData>/workspace/<project>/output/`
+
+## Building an installer
+
+```powershell
+pnpm bundle           # Windows .exe (NSIS)
+pnpm bundle:mac       # macOS .dmg
+pnpm bundle:linux     # Linux AppImage
+```
+
+Output lands in `dist/installers/`.
+
+## Repo layout
+
+```
+video-studio/
+├── DESIGN.md             ← visual identity (governs everything)
+├── electron/             ← main process, preload, agent bridge (CJS)
+├── src/                  ← React renderer (ESM)
+│   ├── components/ui/    ← TopChrome, TabStrip, RenderProgress, Pulse
+│   ├── routes/           ← Onboarding · Projects · Workbench · Settings
+│   └── lib/              ← agent-client, types re-export, cn helper
+└── agent/                ← Node sidecar (Claude Agent SDK + HyperFrames)
+    ├── prompts/system.md ← agent's master brief
+    └── src/tasks/        ← per-stage orchestration
+```
+
+## How the agent uses your local Claude
+
+The agent imports `@anthropic-ai/claude-agent-sdk` with **no `ANTHROPIC_API_KEY` in the environment**. The SDK auto-detects your Claude Code login at `~/.claude/` and routes requests through your Pro/Max subscription. Every tool call streams back to the renderer as a live event.
+
+Skills the agent loads on demand (from `~/.claude/skills/`):
+
+- `hyperframes` + `hyperframes-cli` — composition rules and CLI commands
+- HyperFrames references: `typography.md`, `transitions.md`, `motion-principles.md`, `captions.md`, `tts.md`
+- `ffmpeg` — only when post-processing is needed
 
 ## Troubleshooting
 
 - **"claude command not found"** — install the Claude Code CLI and run `claude login`
-- **"No ElevenLabs API key"** — check `.env` and restart the app
-- **Render hangs at 0%** — first render downloads Chromium headless (~200 MB); be patient
-- **Rust compile fails** — ensure you have the Tauri 2 system deps installed for your OS
+- **Render hangs** — HyperFrames downloads bundled Chromium on first render (~200 MB); be patient
+- **Electron won't launch** — `pnpm install` then `pnpm rebuild electron` to refetch the binary
 
 ## License
 
