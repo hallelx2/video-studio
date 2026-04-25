@@ -10,15 +10,18 @@ import {
   listSessions as ipcListSessions,
   loadSession as ipcLoadSession,
   onAgentEvent,
+  openExternal,
   renameSession as ipcRenameSession,
   respondToPrompt,
   saveConfig,
   saveSession as ipcSaveSession,
+  startPreview,
   stopPreview,
 } from "../lib/agent-client.js";
 import {
   DEFAULT_CONFIG,
   FORMAT_OPTIONS,
+  MODEL_OPTIONS,
   VIDEO_TYPES,
   type AgentEvent,
   type AppConfig,
@@ -36,6 +39,10 @@ import { Composer } from "../components/agent/Composer.js";
 import { ArtifactPanel } from "../components/agent/ArtifactPanel.js";
 import { SessionSidebar } from "../components/agent/SessionSidebar.js";
 import { EmptyComposerState } from "../components/agent/EmptyComposerState.js";
+import {
+  SLASH_COMMANDS,
+  type CommandHandlers,
+} from "../components/agent/slash-commands.js";
 
 /**
  * Chat-shaped workbench with multiple sessions per project.
@@ -389,6 +396,80 @@ export function WorkbenchRoute() {
     setRunning(false);
   }, []);
 
+  // ─── Slash command handlers ─────────────────────────────────────────
+  const slashHandlers: CommandHandlers = useMemo(
+    () => ({
+      onHelp: () => {
+        // Push a synthetic agent_text event listing every command. Markdown
+        // renders it in the stream so it persists with the session.
+        const lines = ["**Slash commands**\n"];
+        for (const cmd of SLASH_COMMANDS) {
+          const aliases =
+            cmd.aliases && cmd.aliases.length > 0
+              ? ` *(${cmd.aliases.map((a) => `/${a}`).join(", ")})*`
+              : "";
+          lines.push(`- \`/${cmd.name}\`${aliases} — ${cmd.description}`);
+        }
+        const helpText = lines.join("\n");
+        setEvents((prev) => [
+          ...prev,
+          { type: "agent_text", messageId: `help-${Date.now()}`, text: helpText },
+        ]);
+      },
+      onNewSession: () => {
+        void handleCreateSession();
+      },
+      onClear: () => {
+        if (!window.confirm("Clear this session's events? The session itself stays.")) return;
+        setEvents([]);
+        briefRef.current = "";
+      },
+      onStop: () => {
+        void handleStop();
+      },
+      onApprove: () => {
+        if (!agent.pendingPrompt) return;
+        void handlePromptResponse("approve");
+      },
+      onCancel: () => {
+        if (!agent.pendingPrompt) return;
+        void handlePromptResponse("cancel");
+      },
+      onPreview: () => {
+        const composition = agent.artifacts.find((a) => a.kind === "composition");
+        if (!composition) return;
+        const idx = Math.max(
+          composition.path.lastIndexOf("/"),
+          composition.path.lastIndexOf("\\")
+        );
+        const workspaceDir = idx === -1 ? composition.path : composition.path.slice(0, idx);
+        void (async () => {
+          try {
+            const { url } = await startPreview(workspaceDir);
+            await openExternal(url);
+          } catch {
+            // ignore — bridge already surfaces the error event
+          }
+        })();
+      },
+      onSwitchModel: (hint: string) => {
+        // Match by family alias first ("opus" → first opus model), then by id substring.
+        const lower = hint.toLowerCase().trim();
+        if (!lower) return;
+        const byFamily = MODEL_OPTIONS.find((m) => m.family === lower);
+        if (byFamily) {
+          handleModelChange(byFamily.id);
+          return;
+        }
+        const byId = MODEL_OPTIONS.find(
+          (m) => m.id.toLowerCase().includes(lower) || m.label.toLowerCase().includes(lower)
+        );
+        if (byId) handleModelChange(byId.id);
+      },
+    }),
+    [agent.artifacts, agent.pendingPrompt, handleCreateSession, handleModelChange, handlePromptResponse, handleStop]
+  );
+
   const typeMeta = useMemo(() => VIDEO_TYPES.find((t) => t.id === videoType)!, [videoType]);
   const hasHistory = events.length > 0;
 
@@ -519,10 +600,12 @@ export function WorkbenchRoute() {
               hasPendingPrompt={!!agent.pendingPrompt}
               hasHistory={hasHistory}
               modelId={modelId}
+              artifacts={agent.artifacts}
               onModelChange={handleModelChange}
               onSubmit={handleComposerSubmit}
               onStop={handleStop}
               projectName={productId ?? "this project"}
+              slashHandlers={slashHandlers}
             />
           </section>
 
@@ -544,10 +627,12 @@ export function WorkbenchRoute() {
             hasPendingPrompt={!!agent.pendingPrompt}
             hasHistory={false}
             modelId={modelId}
+            artifacts={agent.artifacts}
             onModelChange={handleModelChange}
             onSubmit={handleComposerSubmit}
             onStop={handleStop}
             projectName={productId ?? "this project"}
+            slashHandlers={slashHandlers}
           />
         </section>
       )}

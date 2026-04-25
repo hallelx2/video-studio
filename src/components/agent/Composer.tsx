@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn.js";
-import type { RunStatus } from "../../lib/agent-state.js";
+import type { Artifact, RunStatus } from "../../lib/agent-state.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { SlashCommandMenu } from "./SlashCommandMenu.js";
+import {
+  filterCommands,
+  parseSlashInput,
+  type CommandHandlers,
+  type SlashCommand,
+} from "./slash-commands.js";
 
 /**
  * Chat composer — shadcn-style refined, no aggressive border colors.
@@ -30,21 +37,55 @@ interface ComposerProps {
   hasPendingPrompt: boolean;
   hasHistory: boolean;
   modelId: string;
+  artifacts: Artifact[];
   onModelChange: (id: string) => void;
   onSubmit: (text: string) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   projectName: string;
+  /** Handlers for slash commands. Provided by Workbench. */
+  slashHandlers: CommandHandlers;
 }
 
 export function Composer(props: ComposerProps) {
   const [value, setValue] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [focused, setFocused] = useState(false);
+  const [slashIndex, setSlashIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const mode = deriveMode(props.status, props.hasPendingPrompt, props.hasHistory);
   const placeholder = placeholderFor(mode, props.projectName);
   const hint = hintFor(mode);
+
+  // ─── Slash command detection ────────────────────────────────────────
+  const slashParse = useMemo(() => parseSlashInput(value), [value]);
+  const slashCtx = useMemo(
+    () => ({
+      status: props.status,
+      hasPendingPrompt: props.hasPendingPrompt,
+      hasHistory: props.hasHistory,
+      artifacts: props.artifacts,
+      hasComposition: props.artifacts.some((a) => a.kind === "composition"),
+    }),
+    [props.status, props.hasPendingPrompt, props.hasHistory, props.artifacts]
+  );
+  const slashMatches = useMemo(
+    () => (slashParse ? filterCommands(slashParse.name, slashCtx) : []),
+    [slashParse, slashCtx]
+  );
+  const slashOpen = slashParse !== null;
+
+  // Reset highlight when the match list changes shape.
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [slashMatches.length, slashParse?.name]);
+
+  const executeSlashCommand = (cmd: SlashCommand) => {
+    const args = slashParse?.args ?? "";
+    setValue("");
+    void cmd.execute(args, slashCtx, props.slashHandlers);
+    requestAnimationFrame(() => textareaRef.current?.focus());
+  };
 
   // Auto-grow up to ~6 rows.
   useEffect(() => {
@@ -71,6 +112,35 @@ export function Composer(props: ComposerProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // While the slash menu is open, intercept nav keys.
+    if (slashOpen && slashMatches.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashIndex((i) => Math.min(i + 1, slashMatches.length - 1));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIndex((i) => Math.max(i - 1, 0));
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+        e.preventDefault();
+        executeSlashCommand(slashMatches[slashIndex]);
+        return;
+      }
+      if (e.key === "Tab") {
+        e.preventDefault();
+        executeSlashCommand(slashMatches[slashIndex]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setValue("");
+        return;
+      }
+    }
+
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
       handleSubmit();
@@ -83,7 +153,20 @@ export function Composer(props: ComposerProps) {
   };
 
   return (
-    <div className="bg-ink px-10 pb-5 pt-3">
+    <div className="relative bg-ink px-10 pb-5 pt-3">
+      {/* Slash command palette — pops up when the user starts a / command */}
+      {slashOpen && (
+        <div className="absolute inset-x-10 bottom-full -translate-y-1">
+          <SlashCommandMenu
+            commands={slashMatches}
+            activeIndex={slashIndex}
+            onSelect={executeSlashCommand}
+            onHover={setSlashIndex}
+            onClose={() => setValue("")}
+          />
+        </div>
+      )}
+
       {/* shadcn-style: single neutral border, soft ring on focus, no mode-tinted color */}
       <div
         className={cn(
