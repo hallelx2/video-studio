@@ -99,27 +99,55 @@ function prettyName(slug: string): string {
 }
 
 function extractDescription(readme: string): string | null {
-  // First non-empty, non-heading, non-badge, non-link-only paragraph.
-  const lines = readme.split(/\r?\n/);
-  let buf = "";
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      if (buf) break;
-      continue;
+  // Pre-clean: drop HTML comments wholesale.
+  const cleaned = readme.replace(/<!--[\s\S]*?-->/g, "");
+
+  // Split into paragraphs (one or more blank lines).
+  const paragraphs = cleaned.split(/\r?\n\s*\r?\n/);
+
+  for (const raw of paragraphs) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+
+    // Skip headings, blockquotes, hrs.
+    if (/^#{1,6}\s/.test(trimmed)) continue;
+    if (trimmed.startsWith(">")) continue;
+    if (/^[-_*]{3,}\s*$/.test(trimmed)) continue;
+
+    // Skip pure-HTML blocks (centered badge/logo headers, tables of contents, etc).
+    // A paragraph counts as "pure HTML" if stripping all tags leaves no prose.
+    const naked = stripMarkup(trimmed);
+    if (!naked || naked.length < 20) continue;
+
+    // Skip image-only / badge-only paragraphs (pure markdown imagery, no prose).
+    if (/^(!\[|\[!\[)/.test(trimmed)) {
+      const afterImagery = trimmed
+        .replace(/\[?!\[[^\]]*\]\([^)]+\)\]?(\([^)]+\))?/g, "")
+        .trim();
+      if (afterImagery.length < 20) continue;
     }
-    if (trimmed.startsWith("#")) continue;
-    if (trimmed.startsWith(">")) continue; // skip blockquotes (often taglines but inconsistent)
-    if (/^!\[/.test(trimmed)) continue; // image
-    if (/^\[!\[/.test(trimmed)) continue; // badge
-    if (/^---+$/.test(trimmed)) continue; // hr
-    buf += (buf ? " " : "") + trimmed;
-    if (buf.length > 240) break;
+
+    let text = naked;
+    if (text.length > 240) text = text.slice(0, 237) + "...";
+    return text;
   }
-  buf = buf.replace(/\s+/g, " ").trim();
-  if (!buf) return null;
-  if (buf.length > 240) buf = buf.slice(0, 237) + "...";
-  return buf;
+
+  return null;
+}
+
+/**
+ * Strip HTML tags, image markdown, link markdown, and emphasis characters
+ * to leave just the prose. Whitespace collapsed to single spaces.
+ */
+function stripMarkup(input: string): string {
+  return input
+    .replace(/<[^>]+>/g, " ")                    // HTML tags
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, " ")        // ![alt](src)
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")      // [text](href) → text
+    .replace(/`([^`]+)`/g, "$1")                  // `code`
+    .replace(/[*_~]+/g, "")                       // emphasis chars
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /**
