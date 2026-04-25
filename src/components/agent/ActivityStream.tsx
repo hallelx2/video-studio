@@ -120,9 +120,18 @@ export function ActivityStream({
           <Empty filter={filter} />
         ) : (
           <ul className="flex flex-col gap-2">
-            {visible.map((activity) => (
-              <li key={activity.id}>{renderActivity(activity)}</li>
-            ))}
+            {visible.map((activity, i) => {
+              // Turn boundary: every UserActivity (except the very first one
+              // in the visible list) starts a new turn — render a hairline
+              // divider above it so multi-run conversations are scannable.
+              const isTurnStart = activity.kind === "user" && i > 0;
+              return (
+                <li key={activity.id}>
+                  {isTurnStart && <TurnDivider />}
+                  {renderActivity(activity)}
+                </li>
+              );
+            })}
             {pendingPrompt && onRespondToPrompt && (filter === "all" || filter === "chat") && (
               <li>
                 <InlineApproval prompt={pendingPrompt} onRespond={onRespondToPrompt} />
@@ -131,6 +140,18 @@ export function ActivityStream({
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+function TurnDivider() {
+  return (
+    <div className="my-6 flex items-center gap-4" aria-hidden>
+      <span className="hairline h-px flex-1 border-t" />
+      <span className="font-mono text-[9px] uppercase tracking-widest text-paper-mute/50">
+        new turn
+      </span>
+      <span className="hairline h-px flex-1 border-t" />
     </div>
   );
 }

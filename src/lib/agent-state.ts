@@ -178,6 +178,8 @@ export interface AgentRunState {
   } | null;
   fatalError: { scope: string | null; message: string } | null;
   metrics: RunMetrics;
+  /** Files the agent has touched, derived from Read/Write/Edit tool calls. */
+  artifacts: Artifact[];
 }
 
 // ─── Reducer ──────────────────────────────────────────────────────────────
@@ -215,6 +217,7 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
       toolCallErrors: 0,
       assistantBlocks: 0,
     },
+    artifacts: [],
   };
 
   // We synthesize a timestamp per event from its insertion order so the UI
@@ -453,6 +456,10 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
     }
   }
 
+  // Derive artifacts from the same event log — Hypatia pattern: every view
+  // model is a pure function of the message stream.
+  state.artifacts = extractArtifacts(events);
+
   return state;
 }
 
@@ -491,5 +498,167 @@ export function totalUsageTokens(u: UsageInfo): number {
     (u.output_tokens ?? 0) +
     (u.cache_creation_input_tokens ?? 0) +
     (u.cache_read_input_tokens ?? 0)
+  );
+}
+
+// ─── Artifact extraction (Hypatia-style derived view) ────────────────────
+// We don't store artifacts separately — they're a pure function of the event
+// log. Any tool call with a file_path argument adds/updates an entry. The
+// most recent Write/Edit wins; otherwise we record a Read.
+
+export type ArtifactKind =
+  | "script"        // script.json
+  | "design"        // DESIGN.md
+  | "brief"         // source-brief.md
+  | "manifest"      // manifest.json
+  | "composition"   // index.html (root or sub)
+  | "narration"     // narration/*.wav
+  | "render"        // output/*.mp4
+  | "config"        // package.json, tsconfig.json
+  | "code"          // .ts/.tsx/.js/.css
+  | "doc"           // README, *.md
+  | "other";
+
+export interface Artifact {
+  /** Stable identity by full path so the UI doesn't churn. */
+  path: string;
+  /** Last known basename. */
+  name: string;
+  /** Lowercase extension without leading dot. */
+  ext: string;
+  kind: ArtifactKind;
+  /** Most recent action recorded for this file. */
+  lastAction: "wrote" | "edited" | "read";
+  /** Tool call id of the most recent action (used as a React key). */
+  lastToolId: string;
+  /** Order index in the event log of the most recent action. */
+  lastIndex: number;
+  /** If we wrote it, the content the agent passed in — no need to re-read disk. */
+  inlineContent: string | null;
+  /** Number of times this file has been touched. */
+  touches: number;
+}
+
+export function extractArtifacts(events: AgentEvent[]): Artifact[] {
+  const byPath = new Map<string, Artifact>();
+
+  for (let i = 0; i < events.length; i++) {
+    const event = events[i];
+    if (event.type !== "agent_tool_use") continue;
+    const tool = event.tool;
+    if (tool !== "Read" && tool !== "Write" && tool !== "Edit") continue;
+
+    const input = event.input as Record<string, unknown> | null | undefined;
+    const path = input && typeof input.file_path === "string" ? input.file_path : null;
+    if (!path) continue;
+
+    const existing = byPath.get(path);
+    const action: Artifact["lastAction"] =
+      tool === "Write" ? "wrote" : tool === "Edit" ? "edited" : "read";
+
+    // Don't downgrade: if we already saw a Write/Edit, a later Read shouldn't
+    // overwrite the inlineContent or the more meaningful action.
+    if (existing) {
+      const existingScore = scoreAction(existing.lastAction);
+      const newScore = scoreAction(action);
+      if (newScore >= existingScore) {
+        existing.lastAction = action;
+        existing.lastToolId = event.id;
+        existing.lastIndex = i;
+        if (tool === "Write" && typeof input?.content === "string") {
+          existing.inlineContent = input.content;
+        }
+      } else {
+        existing.lastIndex = i; // still bump for sort recency
+      }
+      existing.touches += 1;
+      continue;
+    }
+
+    byPath.set(path, {
+      path,
+      name: basename(path),
+      ext: extOf(path),
+      kind: classifyArtifact(path),
+      lastAction: action,
+      lastToolId: event.id,
+      lastIndex: i,
+      inlineContent:
+        tool === "Write" && typeof input?.content === "string" ? input.content : null,
+      touches: 1,
+    });
+  }
+
+  // Sort by recency (most recent first) so newly-touched files surface to the top.
+  return Array.from(byPath.values()).sort((a, b) => b.lastIndex - a.lastIndex);
+}
+
+function scoreAction(action: Artifact["lastAction"]): number {
+  switch (action) {
+    case "wrote":
+      return 3;
+    case "edited":
+      return 2;
+    case "read":
+      return 1;
+  }
+}
+
+function basename(path: string): string {
+  // Handle both \ and / separators (Windows / Unix)
+  const idx = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
+  return idx === -1 ? path : path.slice(idx + 1);
+}
+
+function extOf(path: string): string {
+  const m = /\.([a-z0-9]+)$/i.exec(path);
+  return m ? m[1].toLowerCase() : "";
+}
+
+function classifyArtifact(path: string): ArtifactKind {
+  const lower = path.toLowerCase();
+  const name = basename(lower);
+  if (name === "script.json") return "script";
+  if (name === "design.md") return "design";
+  if (name === "source-brief.md") return "brief";
+  if (name === "manifest.json") return "manifest";
+  if (name === "index.html") return "composition";
+  if (lower.includes("/narration/") || lower.endsWith(".wav") || lower.endsWith(".mp3")) {
+    return "narration";
+  }
+  if (lower.includes("/output/") && (lower.endsWith(".mp4") || lower.endsWith(".webm"))) {
+    return "render";
+  }
+  if (name === "package.json" || name === "tsconfig.json" || name === "hyperframes.json") {
+    return "config";
+  }
+  const ext = extOf(lower);
+  if (["ts", "tsx", "js", "jsx", "css", "scss"].includes(ext)) return "code";
+  if (["md", "txt", "mdx"].includes(ext)) return "doc";
+  return "other";
+}
+
+const KIND_LABELS: Record<ArtifactKind, string> = {
+  script: "Script",
+  design: "Design",
+  brief: "Brief",
+  manifest: "Manifest",
+  composition: "Composition",
+  narration: "Narration",
+  render: "Render",
+  config: "Config",
+  code: "Code",
+  doc: "Doc",
+  other: "Other",
+};
+
+export function artifactKindLabel(kind: ArtifactKind): string {
+  return KIND_LABELS[kind];
+}
+
+/** A handful of "core" artifact kinds that we surface above generic files. */
+export function isCoreArtifact(a: Artifact): boolean {
+  return ["script", "design", "brief", "manifest", "composition", "narration", "render"].includes(
+    a.kind
   );
 }

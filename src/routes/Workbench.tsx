@@ -22,6 +22,7 @@ import { StageTimeline } from "../components/agent/StageTimeline.js";
 import { ActivityStream } from "../components/agent/ActivityStream.js";
 import { RunMetricsBar } from "../components/agent/RunMetricsBar.js";
 import { Composer } from "../components/agent/Composer.js";
+import { ArtifactPanel } from "../components/agent/ArtifactPanel.js";
 
 /**
  * Chat-shaped workbench.
@@ -153,18 +154,16 @@ export function WorkbenchRoute() {
       }
 
       // 4. Idle / complete / error — start a fresh run.
-      const isFollowUp = events.some((e) => e.type === "result");
+      // History is NEVER cleared (Hypatia pattern). New runs append; the user
+      // sees the full conversation across runs in one continuous stream.
+      const hasPriorRun = events.some((e) => e.type === "result" || e.type === "error");
+      const isFollowUp = hasPriorRun;
       pushUserMessage(text, isFollowUp ? "follow-up" : "brief");
 
-      // For a follow-up, accumulate context. For a brand-new brief, reset.
+      // Carry context forward across runs.
       const nextBrief = isFollowUp
         ? [briefRef.current, text].filter(Boolean).join("\n\n[FOLLOW-UP] ")
         : text;
-
-      // Clear the stream when starting fresh (brief), keep history on follow-up.
-      if (!isFollowUp) {
-        setEvents([{ type: "user_message", text, kind: "brief" }]);
-      }
 
       await startRun(nextBrief);
     },
@@ -300,6 +299,9 @@ export function WorkbenchRoute() {
             projectName={productId ?? "this project"}
           />
         </section>
+
+        {/* ─── Artifact panel (auto-shows when files exist) ──────────────── */}
+        <ArtifactPanel artifacts={agent.artifacts} />
       </div>
     </div>
   );
