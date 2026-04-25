@@ -48,7 +48,7 @@ export function ProjectsRoute() {
               No projects found. Open <Link to="/settings" className="text-cinnabar underline-offset-4 hover:underline">settings</Link> and pick the folder that holds your product repos.
             </p>
           )}
-          <ul>
+          <ul className="stagger-children">
             {projects.map((p) => (
               <li key={p.id}>
                 <button
@@ -85,7 +85,7 @@ export function ProjectsRoute() {
       {/* ─── Main stage ─────────────────────────────────────────────────── */}
       <section className="flex flex-1 flex-col overflow-hidden px-16 py-10">
         {active ? (
-          <>
+          <div key={active.id} className="enter-rise">
             <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
               workbench
             </p>
@@ -125,7 +125,7 @@ export function ProjectsRoute() {
                 Open the workbench →
               </Link>
             </div>
-          </>
+          </div>
         ) : !loading ? (
           <div className="flex h-full items-center justify-center">
             <p className="display-sm text-3xl text-paper-mute">Pick a project from the rail.</p>

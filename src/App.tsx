@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
 import { getConfig } from "./lib/agent-client.js";
+import { TopChrome } from "./components/ui/TopChrome.js";
+import { Pulse } from "./components/ui/Pulse.js";
 
 /**
  * Atelier Noir shell.
  *
- * Just the grain overlay and a route outlet. Routes own their own internal
- * layout (left rail, workbench, agent stream) so each page can compose them
- * differently — see DESIGN.md for the prescribed shape.
+ * Owns: grain overlay, top chrome (always visible), and the route outlet.
+ * Routes own their own internal layout (left rail, workbench, agent stream)
+ * so each page can compose them differently — see DESIGN.md.
  */
 export function App() {
   const navigate = useNavigate();
@@ -36,14 +38,17 @@ export function App() {
   if (!checked) {
     return (
       <div className="grain flex h-screen w-screen items-center justify-center bg-ink">
-        <span className="pulse-cinnabar h-2 w-2 rounded-full bg-cinnabar" />
+        <Pulse size="md" />
       </div>
     );
   }
 
   return (
     <div className="grain flex h-screen w-screen flex-col bg-ink text-paper">
-      <Outlet />
+      <TopChrome />
+      <div className="flex-1 overflow-hidden">
+        <Outlet />
+      </div>
     </div>
   );
 }

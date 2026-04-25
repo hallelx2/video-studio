@@ -138,3 +138,37 @@ samp {
 .hairline {
   border-color: var(--color-brass-line);
 }
+
+/* ─── Stagger entrance ─────────────────────────────────────────────────────
+ * Per DESIGN.md: 40ms per item, 200ms total max. Apply .stagger-children
+ * to a list and each child fades + lifts 8px on first paint.
+ * ────────────────────────────────────────────────────────────────────────── */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.stagger-children > * {
+  opacity: 0;
+  animation: stagger-in 0.42s var(--ease-atelier) forwards;
+}
+.stagger-children > *:nth-child(1)  { animation-delay:   0ms; }
+.stagger-children > *:nth-child(2)  { animation-delay:  40ms; }
+.stagger-children > *:nth-child(3)  { animation-delay:  80ms; }
+.stagger-children > *:nth-child(4)  { animation-delay: 120ms; }
+.stagger-children > *:nth-child(5)  { animation-delay: 160ms; }
+.stagger-children > *:nth-child(n+6) { animation-delay: 200ms; }
+
+/* Lighter weight: just a fade-in for things outside lists */
+@keyframes fade-rise {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.enter-rise {
+  animation: fade-rise 0.5s var(--ease-atelier) both;
+}
