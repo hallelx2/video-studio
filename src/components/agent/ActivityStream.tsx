@@ -1,12 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn.js";
-import type { Activity, PendingPrompt, TextActivity } from "../../lib/agent-state.js";
+import type {
+  Activity,
+  AgentRunState,
+  PendingPrompt,
+  TextActivity,
+} from "../../lib/agent-state.js";
 import { TextCard } from "./TextCard.js";
 import { ToolCallCard } from "./ToolCallCard.js";
 import { ProgressCard, LogCard, ErrorCard, RawCard } from "./MetaCards.js";
 import { UserMessageCard } from "./UserMessageCard.js";
 import { InlineApproval } from "./InlineApproval.js";
 import { ReasoningCard } from "./ReasoningCard.js";
+import { StreamEndIndicator } from "./StreamEndIndicator.js";
 
 const REASONING_MAX_LEN = 500;
 
@@ -24,10 +30,13 @@ export function ActivityStream({
   activities,
   pendingPrompt,
   onRespondToPrompt,
+  agentState,
 }: {
   activities: Activity[];
   pendingPrompt?: PendingPrompt | null;
   onRespondToPrompt?: (response: string) => void | Promise<void>;
+  /** Full agent state for terminal-end markers. Optional — falls back to no marker. */
+  agentState?: AgentRunState;
 }) {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [autoScroll, setAutoScroll] = useState(true);
@@ -143,6 +152,14 @@ export function ActivityStream({
             {pendingPrompt && onRespondToPrompt && (filter === "all" || filter === "chat") && (
               <li>
                 <InlineApproval prompt={pendingPrompt} onRespond={onRespondToPrompt} />
+              </li>
+            )}
+            {agentState && (filter === "all" || filter === "chat") && (
+              <li>
+                <StreamEndIndicator
+                  state={agentState}
+                  hasInlineApproval={!!pendingPrompt}
+                />
               </li>
             )}
           </ul>

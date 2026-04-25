@@ -586,6 +586,7 @@ export function WorkbenchRoute() {
                 activities={agent.activities}
                 pendingPrompt={agent.pendingPrompt}
                 onRespondToPrompt={handlePromptResponse}
+                agentState={agent}
               />
             </div>
             <RunMetricsBar
