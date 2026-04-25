@@ -22,7 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "src-tauri", "studio", "agent"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+  "include": ["src", "electron/types.ts"],
+  "exclude": ["node_modules", "dist", "agent", "electron/dist"]
 }

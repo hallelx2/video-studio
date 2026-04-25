@@ -1,31 +1,33 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { resolve } from "node:path";
 
-// @ts-ignore
-const host = process.env.TAURI_DEV_HOST;
-
+/**
+ * Vite config for the renderer (React UI).
+ * The Electron main process is built separately by tsc — see electron/tsconfig.json.
+ *
+ * `base: "./"` is required so Electron's `file://` protocol resolves assets correctly
+ * when loading the production bundle.
+ */
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  base: "./",
   clearScreen: false,
+  build: {
+    outDir: "dist/renderer",
+    emptyOutDir: true,
+  },
   server: {
     port: 5173,
     strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 5174,
-        }
-      : undefined,
     watch: {
-      ignored: ["**/src-tauri/**", "**/studio/**", "**/agent/dist/**"],
+      ignored: ["**/electron/dist/**", "**/agent/dist/**", "**/dist/**"],
     },
   },
   resolve: {
     alias: {
-      "@": "/src",
+      "@": resolve(__dirname, "src"),
     },
   },
 });

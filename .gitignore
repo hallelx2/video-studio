@@ -1,6 +1,5 @@
 node_modules
 dist
-target
 .vscode
 .idea
 
@@ -8,26 +7,10 @@ target
 .env
 .env.local
 
-# Tauri
-src-tauri/target
-src-tauri/gen
-src-tauri/binaries/agent-*
-
-# Bun-compiled agent sidecars are 100+ MB each; rebuild with `pnpm sidecar:windows`
-agent/src/system-prompt.generated.ts
-
-# Agent build
+# Build artifacts
+electron/dist
 agent/dist
-
-# Studio artifacts
-studio/dist
-studio/output
-studio/public/audio
-studio/public/manifests
-
-# Preserve committed reference assets but ignore user screen recordings
-studio/public/assets/**/screen-recordings
-!studio/public/assets/**/screen-recordings/.gitkeep
+agent/src/system-prompt.generated.ts
 
 # OS
 .DS_Store

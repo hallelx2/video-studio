@@ -9,10 +9,10 @@ import { OnboardingRoute } from "./routes/Onboarding.js";
 import { ErrorBoundary } from "./routes/ErrorBoundary.js";
 import "./index.css";
 
-// Hash routing instead of browser routing: in a Tauri bundle the initial URL is
-// something like `tauri://localhost/index.html`, which browser routing can't match.
-// Hash routing stays anchored to the page so navigation works consistently in dev,
-// bundled installer, and when react-router rehydrates from any unexpected URL.
+// Hash routing — required because Electron loads the bundle via `file://` in
+// production. Browser routing breaks against file:// URLs, but hash routing
+// stays anchored to the page so navigation works in dev (Vite), in the
+// packaged installer, and when react-router rehydrates from any unexpected URL.
 const router = createHashRouter([
   {
     path: "/onboarding",
