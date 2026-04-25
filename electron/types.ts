@@ -111,13 +111,33 @@ export interface GenerateRequest {
   brief?: string;
 }
 
+export interface UsageInfo {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_creation_input_tokens?: number;
+  cache_read_input_tokens?: number;
+}
+
 export type AgentEvent =
   | { type: "progress"; phase: string; message?: string; progress?: number }
-  | { type: "prompt"; id: string; question: string; options?: string[]; payload?: Record<string, unknown> }
-  | { type: "agent_text"; text: string }
-  | { type: "agent_tool_use"; tool: string; input: unknown }
-  | { type: "agent_tool_result"; tool: string; isError?: boolean; text?: string }
+  | {
+      type: "prompt";
+      id: string;
+      question: string;
+      options?: string[];
+      payload?: Record<string, unknown>;
+    }
+  | { type: "agent_text"; messageId?: string; text: string }
+  | { type: "agent_tool_use"; id: string; tool: string; input: unknown }
+  | { type: "agent_tool_result"; id: string; isError?: boolean; text?: string }
   | { type: "agent_log"; level: string; text: string }
+  | {
+      type: "agent_result";
+      subtype?: string;
+      usage?: UsageInfo | null;
+      costUsd?: number;
+      durationMs?: number;
+    }
   | {
       type: "result";
       status: "success" | "needs_input" | "failed";

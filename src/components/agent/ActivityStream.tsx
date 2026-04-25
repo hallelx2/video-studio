@@ -1,0 +1,189 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { cn } from "../../lib/cn.js";
+import type { Activity } from "../../lib/agent-state.js";
+import { TextCard } from "./TextCard.js";
+import { ToolCallCard } from "./ToolCallCard.js";
+import { ProgressCard, LogCard, ErrorCard, RawCard } from "./MetaCards.js";
+
+type FilterKey = "all" | "text" | "tools" | "progress" | "errors";
+
+const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "text", label: "Thinking" },
+  { key: "tools", label: "Tools" },
+  { key: "progress", label: "Progress" },
+  { key: "errors", label: "Errors" },
+];
+
+export function ActivityStream({ activities }: { activities: Activity[] }) {
+  const [filter, setFilter] = useState<FilterKey>("all");
+  const [autoScroll, setAutoScroll] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const counts = useMemo(() => countByKind(activities), [activities]);
+
+  const visible = useMemo(() => {
+    switch (filter) {
+      case "all":
+        return activities;
+      case "text":
+        return activities.filter((a) => a.kind === "text");
+      case "tools":
+        return activities.filter((a) => a.kind === "tool");
+      case "progress":
+        return activities.filter((a) => a.kind === "progress");
+      case "errors":
+        return activities.filter((a) => a.kind === "error");
+    }
+  }, [activities, filter]);
+
+  // Auto-scroll to bottom when new activities arrive — but pause if user
+  // scrolled up to read something earlier.
+  useEffect(() => {
+    if (!autoScroll) return;
+    const node = scrollRef.current;
+    if (!node) return;
+    node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+  }, [visible.length, autoScroll]);
+
+  const handleScroll = () => {
+    const node = scrollRef.current;
+    if (!node) return;
+    const distFromBottom = node.scrollHeight - node.scrollTop - node.clientHeight;
+    setAutoScroll(distFromBottom < 80);
+  };
+
+  return (
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* Filter chips */}
+      <div className="hairline flex items-center justify-between gap-4 border-b px-12 py-3">
+        <div className="flex items-center gap-1">
+          {FILTERS.map((f) => {
+            const isActive = filter === f.key;
+            const count = countForFilter(counts, f.key);
+            return (
+              <button
+                key={f.key}
+                onClick={() => setFilter(f.key)}
+                className={cn(
+                  "flex items-baseline gap-2 px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                  isActive ? "text-paper" : "text-paper-mute hover:text-paper"
+                )}
+              >
+                <span>{f.label}</span>
+                {count > 0 && (
+                  <span
+                    className={cn(
+                      "tabular",
+                      isActive ? "text-cinnabar" : "text-paper-mute/70"
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
+                {isActive && (
+                  <span className="absolute h-px w-full translate-y-3 bg-cinnabar" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          onClick={() => setAutoScroll((v) => !v)}
+          className={cn(
+            "font-mono text-[10px] uppercase tracking-widest transition-colors",
+            autoScroll ? "text-cinnabar" : "text-paper-mute hover:text-paper"
+          )}
+          title={autoScroll ? "Auto-scroll enabled — click to pause" : "Auto-scroll paused — click to resume"}
+        >
+          {autoScroll ? "tail ●" : "tail ○"}
+        </button>
+      </div>
+
+      {/* Stream */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-12 py-6"
+      >
+        {visible.length === 0 ? (
+          <Empty filter={filter} />
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {visible.map((activity) => (
+              <li key={activity.id}>{renderActivity(activity)}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function renderActivity(activity: Activity): React.ReactNode {
+  switch (activity.kind) {
+    case "text":
+      return <TextCard activity={activity} />;
+    case "tool":
+      return <ToolCallCard activity={activity} />;
+    case "progress":
+      return <ProgressCard activity={activity} />;
+    case "log":
+      return <LogCard activity={activity} />;
+    case "error":
+      return <ErrorCard activity={activity} />;
+    case "raw":
+      return <RawCard activity={activity} />;
+  }
+}
+
+function Empty({ filter }: { filter: FilterKey }) {
+  const messages: Record<FilterKey, string> = {
+    all: "No activity yet.",
+    text: "The agent hasn't said anything yet.",
+    tools: "No tools called yet.",
+    progress: "No stage progress yet.",
+    errors: "No errors. Good.",
+  };
+  return (
+    <div className="flex h-full items-center justify-center">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+        {messages[filter]}
+      </p>
+    </div>
+  );
+}
+
+interface KindCounts {
+  text: number;
+  tool: number;
+  progress: number;
+  error: number;
+  total: number;
+}
+
+function countByKind(activities: Activity[]): KindCounts {
+  const counts: KindCounts = { text: 0, tool: 0, progress: 0, error: 0, total: activities.length };
+  for (const a of activities) {
+    if (a.kind === "text") counts.text += 1;
+    else if (a.kind === "tool") counts.tool += 1;
+    else if (a.kind === "progress") counts.progress += 1;
+    else if (a.kind === "error") counts.error += 1;
+  }
+  return counts;
+}
+
+function countForFilter(c: KindCounts, key: FilterKey): number {
+  switch (key) {
+    case "all":
+      return c.total;
+    case "text":
+      return c.text;
+    case "tools":
+      return c.tool;
+    case "progress":
+      return c.progress;
+    case "errors":
+      return c.error;
+  }
+}

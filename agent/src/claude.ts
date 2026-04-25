@@ -117,11 +117,12 @@ function streamMessage(msg: unknown) {
 
   switch (m.type) {
     case "assistant":
-      emitText(m);
+      emitAssistantBlocks(m);
       break;
     case "tool_use":
       emit({
         type: "agent_tool_use",
+        id: typeof m.id === "string" ? m.id : `tu_${Date.now()}`,
         tool: m.name,
         input: m.input,
       });
@@ -129,27 +130,72 @@ function streamMessage(msg: unknown) {
     case "tool_result":
       emit({
         type: "agent_tool_result",
-        tool: m.tool_use_id ?? "unknown",
+        id: typeof m.tool_use_id === "string" ? m.tool_use_id : "unknown",
+        text: extractToolResultText(m.content),
         isError: Boolean(m.is_error),
       });
       break;
     case "result":
       emit({
         type: "agent_result",
-        subtype: m.subtype,
-        usage: m.usage,
+        subtype: typeof m.subtype === "string" ? m.subtype : undefined,
+        usage: m.usage ?? null,
+        costUsd: typeof m.total_cost_usd === "number" ? m.total_cost_usd : undefined,
+        durationMs: typeof m.duration_ms === "number" ? m.duration_ms : undefined,
       });
       break;
   }
 }
 
-function emitText(assistantMsg: Record<string, unknown>) {
-  const message = assistantMsg.message as { content?: Array<{ type: string; text?: string }> };
+/**
+ * Walk every block of an assistant message and emit text/tool_use events.
+ * Each assistant message may interleave text and tool_use blocks; we surface
+ * them as separate events keyed by message id + block index so the UI can
+ * pair tool_use → tool_result and group consecutive text blocks visually.
+ */
+function emitAssistantBlocks(assistantMsg: Record<string, unknown>) {
+  const message = assistantMsg.message as
+    | {
+        id?: string;
+        content?: Array<Record<string, unknown>>;
+      }
+    | undefined;
   if (!message?.content) return;
 
+  const messageId = message.id ?? `msg_${Date.now()}`;
+
   for (const block of message.content) {
-    if (block.type === "text" && block.text) {
-      emit({ type: "agent_text", text: block.text });
+    if (block.type === "text" && typeof block.text === "string") {
+      emit({ type: "agent_text", messageId, text: block.text });
+      continue;
+    }
+    if (block.type === "tool_use") {
+      emit({
+        type: "agent_tool_use",
+        id: typeof block.id === "string" ? block.id : `tu_${Date.now()}`,
+        tool: block.name,
+        input: block.input,
+      });
+      continue;
     }
   }
+}
+
+/**
+ * Tool results arrive as either a plain string or an array of content blocks
+ * ([{type: "text", text: "..."}]). Normalise to a single string for the UI.
+ */
+function extractToolResultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((block) => {
+      if (typeof block === "string") return block;
+      if (block && typeof block === "object" && "text" in block && typeof (block as Record<string, unknown>).text === "string") {
+        return (block as { text: string }).text;
+      }
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
 }

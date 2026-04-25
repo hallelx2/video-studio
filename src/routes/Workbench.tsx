@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   cancelAgent,
@@ -15,17 +15,28 @@ import {
   type VideoType,
 } from "../lib/types.js";
 import { cn } from "../lib/cn.js";
-import { Pulse } from "../components/ui/Pulse.js";
-import { RenderProgress } from "../components/ui/RenderProgress.js";
-import { TabStrip } from "../components/ui/TabStrip.js";
+import { deriveAgentState } from "../lib/agent-state.js";
+import { StageTimeline } from "../components/agent/StageTimeline.js";
+import { ActivityStream } from "../components/agent/ActivityStream.js";
+import { RunMetricsBar } from "../components/agent/RunMetricsBar.js";
+import { PromptApprovalPanel } from "../components/agent/PromptApprovalPanel.js";
 
-type RightPanel = "stream" | "script";
-
-interface ScriptPreview {
-  scenes?: Array<{ id: string; narration: string; title?: string; durationSec?: number }>;
-  totalDurationSec?: number;
-}
-
+/**
+ * Workbench — generation surface for one project.
+ *
+ * Right pane is now a proper agent inspector built around AG-UI patterns:
+ *   ┌──────────────────────────────────────────────────────────┐
+ *   │  StageTimeline (always visible — 6-stage pipeline)       │
+ *   ├──────────────────────────────────────────────────────────┤
+ *   │  ActivityStream (filterable: text / tools / progress …) │
+ *   │  with full-takeover PromptApprovalPanel on HITL events   │
+ *   ├──────────────────────────────────────────────────────────┤
+ *   │  RunMetricsBar (status · elapsed · tools · tokens · $)   │
+ *   └──────────────────────────────────────────────────────────┘
+ *
+ * Raw events are kept in state; the structured AgentRunState is derived
+ * via deriveAgentState() — pure projection, deterministic.
+ */
 export function WorkbenchRoute() {
   const { productId } = useParams<{ productId: string }>();
 
@@ -35,15 +46,6 @@ export function WorkbenchRoute() {
 
   const [events, setEvents] = useState<AgentEvent[]>([]);
   const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState<string | null>(null);
-  const [pendingPrompt, setPendingPrompt] = useState<Extract<AgentEvent, { type: "prompt" }> | null>(
-    null
-  );
-  const [scriptPreview, setScriptPreview] = useState<ScriptPreview | null>(null);
-  const [rightPanel, setRightPanel] = useState<RightPanel>("stream");
-
-  const streamRef = useRef<HTMLDivElement>(null);
 
   // Hydrate defaults from config on first mount.
   useEffect(() => {
@@ -59,36 +61,14 @@ export function WorkbenchRoute() {
   useEffect(() => {
     const unsubscribe = onAgentEvent((event) => {
       setEvents((prev) => [...prev, event]);
-
-      if (event.type === "progress") {
-        if (typeof event.progress === "number") setProgress(event.progress);
-        setPhase(event.phase);
-      }
-      if (event.type === "prompt") {
-        setPendingPrompt(event);
-        // Capture the script preview if the prompt payload carries one
-        const preview = (event.payload?.preview as ScriptPreview | undefined) ?? null;
-        if (preview && preview.scenes) {
-          setScriptPreview(preview);
-          setRightPanel("script");
-        }
-      }
-      if (event.type === "result") {
-        setRunning(false);
-        setProgress(1);
-      }
-      if (event.type === "error" && event.recoverable === false) {
-        setRunning(false);
-      }
+      if (event.type === "result") setRunning(false);
+      if (event.type === "error" && event.recoverable === false) setRunning(false);
     });
     return unsubscribe;
   }, []);
 
-  // Auto-scroll the agent stream when new events arrive (only when stream is visible).
-  useEffect(() => {
-    if (rightPanel !== "stream") return;
-    streamRef.current?.scrollTo({ top: streamRef.current.scrollHeight, behavior: "smooth" });
-  }, [events, rightPanel]);
+  // Derive structured state from the raw event log on every render.
+  const agent = useMemo(() => deriveAgentState(events), [events]);
 
   const toggleFormat = (f: VideoFormat) => {
     setFormats((prev) => (prev.includes(f) ? prev.filter((x) => x !== f) : [...prev, f]));
@@ -97,11 +77,6 @@ export function WorkbenchRoute() {
   const handleGenerate = useCallback(async () => {
     if (!productId) return;
     setEvents([]);
-    setPendingPrompt(null);
-    setScriptPreview(null);
-    setProgress(0);
-    setPhase(null);
-    setRightPanel("stream");
     setRunning(true);
     try {
       await generateVideo({
@@ -124,14 +99,10 @@ export function WorkbenchRoute() {
     setRunning(false);
   }, []);
 
-  const handlePromptResponse = useCallback(
-    async (response: string) => {
-      if (!pendingPrompt) return;
-      await respondToPrompt(pendingPrompt.id, response);
-      setPendingPrompt(null);
-    },
-    [pendingPrompt]
-  );
+  const handlePromptResponse = useCallback(async (response: string) => {
+    if (!agent.pendingPrompt) return;
+    await respondToPrompt(agent.pendingPrompt.id, response);
+  }, [agent.pendingPrompt]);
 
   const canGenerate = !running && formats.length > 0 && !!productId;
   const typeMeta = useMemo(() => VIDEO_TYPES.find((t) => t.id === videoType)!, [videoType]);
@@ -146,9 +117,7 @@ export function WorkbenchRoute() {
           </p>
           <h1 className="display-sm mt-1 text-4xl text-paper">{productId}</h1>
         </div>
-
-        <div className="flex w-[360px] items-center justify-end gap-8">
-          {running && <RenderProgress progress={progress} phase={phase} className="w-full" />}
+        <div className="flex items-center gap-8">
           {!running && (
             <button
               onClick={handleGenerate}
@@ -168,13 +137,13 @@ export function WorkbenchRoute() {
               onClick={handleCancel}
               className="font-mono text-[10px] uppercase tracking-widest text-alarm transition-colors hover:text-paper"
             >
-              cancel
+              cancel run
             </button>
           )}
         </div>
       </header>
 
-      {/* ─── Body: left rail (controls) + right stack ─────────────────── */}
+      {/* ─── Body: left rail (controls) + right pane (agent inspector) ─── */}
       <div className="flex flex-1 overflow-hidden">
         <aside className="hairline flex w-[360px] shrink-0 flex-col gap-10 overflow-y-auto border-r px-8 py-10 stagger-children">
           <Field eyebrow="01" title="Video type">
@@ -251,62 +220,28 @@ export function WorkbenchRoute() {
           </Field>
         </aside>
 
-        <section className="flex flex-1 flex-col overflow-hidden">
-          <TabStrip<RightPanel>
-            tabs={[
-              { id: "stream", label: "Agent stream", badge: events.length > 0 ? String(events.length) : undefined },
-              { id: "script", label: "Script", badge: scriptPreview?.scenes ? `${scriptPreview.scenes.length} scenes` : undefined },
-            ]}
-            active={rightPanel}
-            onChange={setRightPanel}
-            className="px-12"
+        {/* ─── Agent inspector ─────────────────────────────────────────── */}
+        <section className="relative flex flex-1 flex-col overflow-hidden">
+          <StageTimeline stages={agent.stages} currentStageId={agent.currentStageId} />
+          <div className="relative flex-1 overflow-hidden">
+            <ActivityStream activities={agent.activities} />
+            {agent.pendingPrompt && (
+              <PromptApprovalPanel
+                prompt={agent.pendingPrompt}
+                onRespond={handlePromptResponse}
+              />
+            )}
+            {events.length === 0 && !running && (
+              <EmptyHero typeMeta={typeMeta} />
+            )}
+          </div>
+          <RunMetricsBar
+            status={agent.status}
+            metrics={agent.metrics}
+            toolCallCount={agent.metrics.toolCallCount}
+            toolCallErrors={agent.metrics.toolCallErrors}
+            assistantBlocks={agent.metrics.assistantBlocks}
           />
-
-          {rightPanel === "stream" ? (
-            <div ref={streamRef} className="flex-1 overflow-y-auto px-12 py-8 font-mono text-xs">
-              {events.length === 0 ? (
-                <EmptyStream />
-              ) : (
-                <ul className="space-y-1.5">
-                  {events.map((e, i) => (
-                    <EventLine key={i} event={e} />
-                  ))}
-                </ul>
-              )}
-            </div>
-          ) : (
-            <ScriptPanel preview={scriptPreview} />
-          )}
-
-          {pendingPrompt && (
-            <div className="hairline border-t bg-ink-raised px-12 py-6 enter-rise">
-              <div className="flex items-center gap-3">
-                <Pulse />
-                <p className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-                  approval requested
-                </p>
-              </div>
-              <p className="mt-3 text-base leading-relaxed text-paper">{pendingPrompt.question}</p>
-              <div className="mt-5 flex gap-6">
-                {(pendingPrompt.options ?? ["approve", "request-changes"]).map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => handlePromptResponse(opt)}
-                    className={cn(
-                      "border-b pb-1 text-sm transition-colors",
-                      opt === "approve" || opt === "submit"
-                        ? "border-cinnabar text-cinnabar hover:text-paper"
-                        : opt === "cancel"
-                          ? "border-alarm text-alarm hover:text-paper"
-                          : "border-paper-mute text-paper-mute hover:border-paper hover:text-paper"
-                    )}
-                  >
-                    {opt} →
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </section>
       </div>
 
@@ -325,67 +260,21 @@ export function WorkbenchRoute() {
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────
-
-function EmptyStream() {
+function EmptyHero({ typeMeta }: { typeMeta: { label: string; defaultScenes: number; defaultDuration: number } }) {
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-ink/95">
       <div className="max-w-md text-center">
         <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
           the workshop is quiet
         </p>
-        <p className="display-sm mt-4 text-2xl text-paper-mute/70">
-          Press <span className="text-cinnabar">generate</span> to begin.
+        <p className="display-sm mt-4 text-3xl text-paper">
+          Press <span className="text-cinnabar">generate video</span>.
         </p>
         <p className="mt-6 text-xs leading-relaxed text-paper-mute">
-          The agent will read your project, draft a script, and pause for your approval before
-          spending any time on narration or rendering.
+          The agent reads your project, drafts a {typeMeta.defaultScenes}-scene{" "}
+          <span className="text-paper">{typeMeta.label.toLowerCase()}</span> script (~{typeMeta.defaultDuration}s),
+          and pauses for your approval before spending any time on narration or rendering.
         </p>
-      </div>
-    </div>
-  );
-}
-
-function ScriptPanel({ preview }: { preview: ScriptPreview | null }) {
-  if (!preview || !preview.scenes || preview.scenes.length === 0) {
-    return (
-      <div className="flex flex-1 items-center justify-center">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-          script will appear once the agent drafts it
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex-1 overflow-y-auto px-12 py-10 enter-rise">
-      <div className="mx-auto max-w-3xl stagger-children">
-        {preview.scenes.map((scene, i) => (
-          <article key={scene.id} className="hairline mb-px border-b py-6">
-            <div className="flex items-baseline justify-between gap-6 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-              <span className="tabular text-cinnabar">
-                {String(i + 1).padStart(2, "0")}
-              </span>
-              <span className="flex items-baseline gap-3">
-                <span>{scene.id}</span>
-                {scene.durationSec && (
-                  <span className="tabular text-paper-mute">{scene.durationSec.toFixed(1)}s</span>
-                )}
-              </span>
-            </div>
-            {scene.title && (
-              <h3 className="display-sm mt-3 text-2xl text-paper">{scene.title}</h3>
-            )}
-            <p className="mt-3 max-w-2xl font-display text-lg italic leading-relaxed text-paper">
-              "{scene.narration}"
-            </p>
-          </article>
-        ))}
-        {preview.totalDurationSec && (
-          <p className="hairline mt-px border-t pt-4 text-right font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-            total · <span className="tabular text-paper">{preview.totalDurationSec.toFixed(1)}s</span>
-          </p>
-        )}
       </div>
     </div>
   );
@@ -409,64 +298,4 @@ function Field({
       {children}
     </div>
   );
-}
-
-function EventLine({ event }: { event: AgentEvent }) {
-  const { tag, body, tone } = describe(event);
-  return (
-    <li className="grid grid-cols-[auto_1fr] gap-3 leading-relaxed">
-      <span
-        className={cn(
-          "font-mono text-[10px] uppercase tracking-widest",
-          tone === "accent" ? "text-cinnabar" : tone === "alarm" ? "text-alarm" : "text-paper-mute"
-        )}
-      >
-        {tag}
-      </span>
-      <span
-        className={cn(
-          "whitespace-pre-wrap break-words",
-          tone === "alarm" ? "text-alarm" : "text-paper"
-        )}
-      >
-        {body}
-      </span>
-    </li>
-  );
-}
-
-function describe(event: AgentEvent): { tag: string; body: string; tone: "default" | "accent" | "alarm" } {
-  switch (event.type) {
-    case "progress":
-      return { tag: event.phase, body: event.message ?? "", tone: "default" };
-    case "prompt":
-      return { tag: "prompt", body: event.question, tone: "accent" };
-    case "agent_text":
-      return { tag: "agent", body: event.text, tone: "default" };
-    case "agent_tool_use":
-      return {
-        tag: "tool",
-        body: `${event.tool} ${typeof event.input === "string" ? event.input : JSON.stringify(event.input)}`,
-        tone: "default",
-      };
-    case "agent_tool_result":
-      return {
-        tag: event.isError ? "tool-err" : "tool-out",
-        body: event.text ?? "",
-        tone: event.isError ? "alarm" : "default",
-      };
-    case "agent_log":
-      return { tag: event.level, body: event.text, tone: "default" };
-    case "result":
-      return {
-        tag: "done",
-        body: event.message ?? `status: ${event.status}`,
-        tone:
-          event.status === "success" ? "accent" : event.status === "failed" ? "alarm" : "default",
-      };
-    case "error":
-      return { tag: "error", body: event.message, tone: "alarm" };
-    case "raw":
-      return { tag: "raw", body: event.text, tone: "default" };
-  }
 }
