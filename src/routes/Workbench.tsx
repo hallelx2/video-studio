@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   cancelAgent,
   createSession as ipcCreateSession,
@@ -63,6 +63,9 @@ import {
  */
 export function WorkbenchRoute() {
   const { productId } = useParams<{ productId: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  /** Optional ?session=<id> from the search palette. Cleared after consumption. */
+  const requestedSessionId = searchParams.get("session");
 
   // ─── Scaffold state ─────────────────────────────────────────────────
   const [videoType, setVideoType] = useState<VideoType>("product-launch");
@@ -102,15 +105,26 @@ export function WorkbenchRoute() {
       setSessions(existing);
 
       if (existing.length > 0) {
-        const mostRecent = existing[0];
-        const loaded = await ipcLoadSession(productId, mostRecent.id);
-        setCurrentSessionId(mostRecent.id);
+        // If we got here from the search palette with ?session=<id>, prefer
+        // that target. Otherwise pick the most-recently-touched session.
+        const target =
+          (requestedSessionId && existing.find((s) => s.id === requestedSessionId)) ??
+          existing[0];
+        const loaded = await ipcLoadSession(productId, target.id);
+        setCurrentSessionId(target.id);
         if (loaded) {
           setVideoType(loaded.meta.scaffold.videoType);
           setFormats(loaded.meta.scaffold.formats);
           setModelId(loaded.meta.scaffold.modelId);
           setEvents(loaded.events);
         }
+      }
+
+      // Drop the ?session= param now that it's been consumed — keeps the
+      // URL clean and prevents a re-mount from snapping back to the same
+      // session if the user has since switched.
+      if (requestedSessionId) {
+        setSearchParams({}, { replace: true });
       }
 
       setSessionReady(true);

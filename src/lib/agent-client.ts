@@ -132,6 +132,41 @@ export async function deleteSession(projectId: string, sessionId: string): Promi
   return studio().sessions.delete(projectId, sessionId);
 }
 
+/**
+ * Aggregate every session across every project for the global search palette.
+ * Each row is enriched with its parent project's pretty name + slug. This
+ * is O(projects + total sessions) and runs on demand (when the palette
+ * opens), so a few seconds of latency on first open is acceptable.
+ */
+export interface SessionWithProject extends SessionMeta {
+  projectName: string;
+  projectId: string;
+}
+
+export async function getAllSessions(): Promise<SessionWithProject[]> {
+  const projects = await listProjects();
+  const all: SessionWithProject[] = [];
+  // Run in parallel — most projects will return [] quickly.
+  const sessionsPerProject = await Promise.all(
+    projects.map(async (p) => ({
+      project: p,
+      sessions: await listSessions(p.id).catch(() => [] as SessionMeta[]),
+    }))
+  );
+  for (const { project, sessions } of sessionsPerProject) {
+    for (const session of sessions) {
+      all.push({
+        ...session,
+        projectName: project.name,
+        projectId: project.id,
+      });
+    }
+  }
+  // Most-recent first — same default the SessionSidebar uses.
+  all.sort((a, b) => b.updatedAt - a.updatedAt);
+  return all;
+}
+
 /** Subscribe to the agent event stream. Returns an unsubscribe function. */
 export function onAgentEvent(handler: (event: AgentEvent) => void): () => void {
   return studio().agent.onEvent(handler);
