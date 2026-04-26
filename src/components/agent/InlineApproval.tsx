@@ -4,10 +4,9 @@ import type { PendingPrompt } from "../../lib/agent-state.js";
 import {
   openExternal,
   readText,
-  startPreview,
-  stopPreview,
   writeText,
 } from "../../lib/agent-client.js";
+import { usePreview } from "../../lib/preview-context.js";
 
 interface ScenePreview {
   id: string;
@@ -527,60 +526,38 @@ function ComposeApproval({
   onRespond: (response: string) => void | Promise<void>;
 }) {
   const revision = (prompt.payload as { revision?: number }).revision;
-  const [previewing, setPreviewing] = useState<{
-    aspect: string;
-    url: string;
-  } | null>(null);
-  const [starting, setStarting] = useState<string | null>(null);
+  // Preview is now driven by the app-level PreviewProvider so the iframe
+  // appears in the slide-in PreviewPanel instead of launching the user's
+  // external browser.
+  const { current: preview, starting, open, close } = usePreview();
   const [submitting, setSubmitting] = useState(false);
 
   const handlePreview = useCallback(
     async (comp: CompositionRef) => {
       if (starting) return;
-      setStarting(comp.aspect);
-      try {
-        const { url } = await startPreview(comp.path);
-        setPreviewing({ aspect: comp.aspect, url });
-        // Kick the user's default browser. The dev server takes ~1s to come up;
-        // give it a beat so the URL doesn't 404 on first load.
-        setTimeout(() => {
-          openExternal(url).catch(() => undefined);
-        }, 1200);
-      } finally {
-        setStarting(null);
-      }
+      await open({ workspace: comp.path, aspect: comp.aspect });
     },
-    [starting]
+    [open, starting]
   );
-
-  // Auto-stop the preview when the user moves on (approve / cancel / revise).
-  const cleanupPreview = useCallback(async () => {
-    if (previewing) {
-      await stopPreview().catch(() => undefined);
-      setPreviewing(null);
-    }
-  }, [previewing]);
-
-  // Stop on unmount
-  useEffect(() => {
-    return () => {
-      stopPreview().catch(() => undefined);
-    };
-  }, []);
 
   const handleRespond = useCallback(
     async (option: string) => {
       if (submitting) return;
       setSubmitting(true);
       try {
-        await cleanupPreview();
+        // Close the preview when the user moves on so the dev server is
+        // released and a future preview can claim the same port cleanly.
+        await close();
         await onRespond(option);
       } finally {
         setSubmitting(false);
       }
     },
-    [cleanupPreview, onRespond, submitting]
+    [close, onRespond, submitting]
   );
+
+  // Convenience aliases so the JSX below reads cleanly.
+  const previewing = preview ? { aspect: preview.aspect, url: preview.url } : null;
 
   return (
     <article className="hairline relative border-l-2 border-l-cinnabar bg-cinnabar/[0.03] py-4 pl-5 pr-4 enter-rise">
@@ -654,16 +631,14 @@ function ComposeApproval({
                 {isActive ? (
                   <>
                     <button
-                      onClick={() => openExternal(previewing.url).catch(() => undefined)}
+                      onClick={() => previewing && openExternal(previewing.url).catch(() => undefined)}
                       className="border-b border-brass pb-0.5 font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper"
+                      title="Also open the dev server in your default browser"
                     >
-                      open again
+                      browser ↗
                     </button>
                     <button
-                      onClick={async () => {
-                        await stopPreview().catch(() => undefined);
-                        setPreviewing(null);
-                      }}
+                      onClick={() => void close()}
                       className="border-b border-alarm pb-0.5 font-mono text-[10px] uppercase tracking-widest text-alarm hover:text-paper"
                     >
                       stop

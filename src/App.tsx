@@ -4,6 +4,8 @@ import { getConfig, saveConfig } from "./lib/agent-client.js";
 import { TopChrome } from "./components/ui/TopChrome.js";
 import { Pulse } from "./components/ui/Pulse.js";
 import { SearchPalette } from "./components/agent/SearchPalette.js";
+import { PreviewPanel } from "./components/agent/PreviewPanel.js";
+import { PreviewProvider } from "./lib/preview-context.js";
 import { DEFAULT_CONFIG, type AppConfig, type ThemeId } from "./lib/types.js";
 
 /**
@@ -111,12 +113,17 @@ export function App() {
   }
 
   return (
-    <div className="grain flex h-screen w-screen flex-col bg-ink text-paper">
-      <TopChrome theme={theme} onThemeChange={setTheme} />
-      <div className="flex-1 overflow-hidden">
-        <Outlet />
+    <PreviewProvider>
+      <div className="grain flex h-screen w-screen flex-col bg-ink text-paper">
+        <TopChrome theme={theme} onThemeChange={setTheme} />
+        <div className="flex-1 overflow-hidden">
+          <Outlet />
+        </div>
+        <SearchPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+        {/* Inline preview slide-in — globally mounted so any route can drive
+            it via usePreview(). Renders nothing when no preview is active. */}
+        <PreviewPanel />
       </div>
-      <SearchPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
-    </div>
+    </PreviewProvider>
   );
 }

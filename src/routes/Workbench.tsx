@@ -10,14 +10,13 @@ import {
   listSessions as ipcListSessions,
   loadSession as ipcLoadSession,
   onAgentEvent,
-  openExternal,
   renameSession as ipcRenameSession,
   respondToPrompt,
   saveConfig,
   saveSession as ipcSaveSession,
-  startPreview,
   stopPreview,
 } from "../lib/agent-client.js";
+import { usePreview } from "../lib/preview-context.js";
 import {
   DEFAULT_CONFIG,
   FORMAT_OPTIONS,
@@ -76,6 +75,10 @@ export function WorkbenchRoute({
   const params = useParams<{ productId: string }>();
   const productId = projectIdOverride ?? params.productId;
   const [searchParams, setSearchParams] = useSearchParams();
+  // App-level preview slider (mounted once in App.tsx). Slash-command
+  // /preview reaches into this hook to open the inline iframe instead of
+  // launching the external browser.
+  const preview = usePreview();
   /** Optional ?session=<id> from the search palette. Cleared after consumption. */
   const requestedSessionId = searchParams.get("session");
   // Suppress the "unused" warning on `variant` for now — wired through but
@@ -489,14 +492,10 @@ export function WorkbenchRoute({
           composition.path.lastIndexOf("\\")
         );
         const workspaceDir = idx === -1 ? composition.path : composition.path.slice(0, idx);
-        void (async () => {
-          try {
-            const { url } = await startPreview(workspaceDir);
-            await openExternal(url);
-          } catch {
-            // ignore — bridge already surfaces the error event
-          }
-        })();
+        // Aspect is the last path segment (e.g. "1080x1080"). Falls back to
+        // a generic label if the path doesn't contain one.
+        const aspect = workspaceDir.split(/[\\/]/).pop() || "preview";
+        void preview.open({ workspace: workspaceDir, aspect }).catch(() => undefined);
       },
       onSwitchModel: (hint: string) => {
         // Match by family alias first ("opus" → first opus model), then by id substring.

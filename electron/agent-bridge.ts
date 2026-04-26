@@ -4,9 +4,47 @@ import {
   type ChildProcessWithoutNullStreams,
 } from "node:child_process";
 import { app, Notification, type BrowserWindow } from "electron";
+import { connect as netConnect } from "node:net";
 import { resolve, join } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
+
+/**
+ * Probe localhost:<port> until something accepts a TCP connection or we run
+ * out of time. Used so startPreview() can return a URL the iframe can load
+ * immediately instead of racing the dev server's bind() and showing a
+ * Chrome ERR_CONNECTION_REFUSED splash.
+ */
+async function waitForPort(port: number, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  // Hold the last connect-error message as a plain string so TS's flow
+  // narrowing through the closure boundary stays simple.
+  let lastErrMsg: string | null = null;
+  while (Date.now() < deadline) {
+    const ready = await new Promise<boolean>((resolveProbe) => {
+      const sock = netConnect({ port, host: "127.0.0.1" });
+      const settle = (ok: boolean) => {
+        sock.removeAllListeners();
+        sock.destroy();
+        resolveProbe(ok);
+      };
+      sock.once("connect", () => settle(true));
+      sock.once("error", (err: Error) => {
+        lastErrMsg = err.message;
+        settle(false);
+      });
+      // Per-attempt cap so a hung connection doesn't eat the whole budget.
+      setTimeout(() => settle(false), 500);
+    });
+    if (ready) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  throw new Error(
+    `preview dev server didn't accept a connection on port ${port} within ${Math.round(
+      timeoutMs / 1000
+    )}s${lastErrMsg ? ` (last: ${lastErrMsg})` : ""}`
+  );
+}
 
 /**
  * Owns the lifecycle of the agent child process AND the optional HyperFrames
@@ -119,6 +157,23 @@ export class AgentBridge {
       this.previewUrl = null;
       this.previewWorkspace = null;
     });
+
+    // Block resolving the IPC promise until the dev server actually answers
+    // on the port — otherwise the renderer's iframe races the server's
+    // bind() and renders Chrome's ERR_CONNECTION_REFUSED page. 30s budget
+    // covers a cold start where HyperFrames downloads bundled Chromium.
+    try {
+      await waitForPort(resolvedPort, 30000);
+    } catch (err) {
+      // Probe timed out or hard-failed — kill the spawned proc so we don't
+      // leak it, and surface the timeout as a structured error the renderer
+      // can show in the activity stream.
+      if (!proc.killed) proc.kill();
+      this.previewProc = null;
+      this.previewUrl = null;
+      this.previewWorkspace = null;
+      throw err;
+    }
 
     return { url: this.previewUrl };
   }

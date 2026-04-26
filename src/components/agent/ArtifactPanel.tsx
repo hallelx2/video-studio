@@ -7,15 +7,13 @@ import {
   type ArtifactKind,
 } from "../../lib/agent-state.js";
 import {
-  openExternal,
   openPath,
   readText,
   revealInFolder,
   setProjectDesignDefault,
-  startPreview,
-  stopPreview,
   writeText,
 } from "../../lib/agent-client.js";
+import { usePreview } from "../../lib/preview-context.js";
 
 /**
  * Right-side artifact panel — Hypatia pattern. Every file the agent has
@@ -422,11 +420,7 @@ function TextEditor({
 }
 
 function CompositionActions({ artifact }: { artifact: Artifact }) {
-  const [previewing, setPreviewing] = useState<{ url: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  /** Bumped after each preview start to force a hard iframe reload — HMR is
-   *  flaky for the first second while the dev server boots. */
-  const [iframeKey, setIframeKey] = useState(0);
+  const { current: preview, starting, open, close } = usePreview();
 
   // The dev server runs against the workspace folder, not the index.html path.
   const workspaceDir = useMemo(() => {
@@ -437,105 +431,47 @@ function CompositionActions({ artifact }: { artifact: Artifact }) {
     return idx === -1 ? artifact.path : artifact.path.slice(0, idx);
   }, [artifact.path]);
 
-  // Stop the dev server when the user picks a different artifact in the panel.
-  useEffect(() => {
-    return () => {
-      void stopPreview().catch(() => undefined);
-    };
-  }, [workspaceDir]);
+  // Aspect = the workspace folder's last path segment ("1080x1080") so the
+  // slide-in panel header can show which composition is up.
+  const aspect = useMemo(() => {
+    return workspaceDir.split(/[\\/]/).pop() || artifact.name;
+  }, [workspaceDir, artifact.name]);
 
-  const handlePreview = useCallback(async () => {
-    if (busy) return;
-    setBusy(true);
-    try {
-      const { url } = await startPreview(workspaceDir);
-      setPreviewing({ url });
-      setIframeKey((k) => k + 1);
-    } finally {
-      setBusy(false);
-    }
-  }, [busy, workspaceDir]);
-
-  const handleStop = useCallback(async () => {
-    await stopPreview().catch(() => undefined);
-    setPreviewing(null);
-  }, []);
+  const isThisOpen =
+    !!preview && preview.workspace === workspaceDir;
+  const isStarting = starting === aspect;
 
   return (
     <div className="space-y-3">
       <p className="text-xs leading-relaxed text-paper-mute">
-        HyperFrames composition. Press <span className="text-paper">preview</span> to spin up
-        the dev server and play the GSAP timeline inline — hot-reloads as the agent edits the
-        HTML.
+        HyperFrames composition. Press <span className="text-paper">preview</span> to launch the
+        dev server and play the GSAP timeline in the inline viewer — hot-reloads as the agent
+        edits the HTML.
       </p>
 
-      {previewing ? (
-        <>
-          <div className="flex items-center justify-between gap-4">
-            <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-              <span className="pulse-cinnabar h-1 w-1 rounded-full bg-cinnabar" />
-              dev server live
-            </span>
-            <div className="flex items-center gap-4">
-              <button
-                onClick={() => setIframeKey((k) => k + 1)}
-                className="border-b border-brass pb-0.5 font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper"
-                title="Hard reload the iframe"
-              >
-                reload
-              </button>
-              <button
-                onClick={() => openExternal(previewing.url).catch(() => undefined)}
-                className="border-b border-brass pb-0.5 font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper"
-                title="Open in your default browser too"
-              >
-                pop out →
-              </button>
-              <button
-                onClick={handleStop}
-                className="border-b border-alarm pb-0.5 font-mono text-[10px] uppercase tracking-widest text-alarm hover:text-paper"
-              >
-                stop
-              </button>
-            </div>
-          </div>
-
-          {/* Inline iframe — CSP allows http://localhost:* (set in index.html).
-              The 16:9 aspect ratio fits 1920×1080 and 1080×1920 compositions
-              respectively; HyperFrames preview adapts to the composition's
-              data-width/data-height anyway. */}
-          <div className="hairline relative aspect-video w-full overflow-hidden border bg-ink">
-            <iframe
-              key={iframeKey}
-              src={previewing.url}
-              title={`HyperFrames preview · ${artifact.name}`}
-              className="absolute inset-0 h-full w-full"
-              // Sandbox: allow scripts (for GSAP timelines) and same-origin
-              // (for HMR websockets). No allow-top-navigation — the iframe
-              // can't escape the workbench.
-              sandbox="allow-scripts allow-same-origin"
-              loading="lazy"
-            />
-          </div>
-
-          <p className="font-mono text-[10px] tabular text-paper-mute">{previewing.url}</p>
-        </>
-      ) : (
-        <div className="flex items-baseline gap-6">
+      <div className="flex items-baseline gap-6">
+        {isThisOpen ? (
           <button
-            onClick={handlePreview}
-            disabled={busy}
+            onClick={() => void close()}
+            className="border-b border-alarm pb-0.5 font-mono text-[10px] uppercase tracking-widest text-alarm hover:text-paper"
+          >
+            stop preview
+          </button>
+        ) : (
+          <button
+            onClick={() => void open({ workspace: workspaceDir, aspect })}
+            disabled={isStarting}
             className={cn(
               "border-b pb-0.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
-              busy
+              isStarting
                 ? "border-paper-mute/30 text-paper-mute/40"
                 : "border-cinnabar text-cinnabar hover:text-paper"
             )}
           >
-            {busy ? "starting…" : "preview inline →"}
+            {isStarting ? "starting…" : "preview →"}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
