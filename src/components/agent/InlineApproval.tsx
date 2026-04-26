@@ -48,9 +48,14 @@ export function InlineApproval({
   const promptKind = (prompt.payload as { kind?: string }).kind;
   const compositions = (prompt.payload as { compositions?: CompositionRef[] }).compositions;
   const isComposeApproval = promptKind === "compose-approval" && Array.isArray(compositions);
+  const isClarification = promptKind === "clarification";
 
   if (isComposeApproval) {
     return <ComposeApproval prompt={prompt} compositions={compositions!} onRespond={onRespond} />;
+  }
+
+  if (isClarification) {
+    return <ClarificationCard prompt={prompt} onRespond={onRespond} />;
   }
 
   const scenes = (prompt.payload as { preview?: { scenes?: ScenePreview[] } }).preview?.scenes ?? [];
@@ -406,6 +411,85 @@ function ActionButton({
     >
       {option} →
     </button>
+  );
+}
+
+// ─── Clarification flavor — agent asks a question before drafting ────────
+// Different visual treatment from approval prompts: this is an inquiry, not
+// a gate. Brass accent (not cinnabar — we're not asking for permission, we
+// want input). Question in display font, options as soft chip buttons,
+// optional context line above. The chat composer below the card handles
+// free-text answers naturally — no embedded textarea needed here.
+
+function ClarificationCard({
+  prompt,
+  onRespond,
+}: {
+  prompt: PendingPrompt;
+  onRespond: (response: string) => void | Promise<void>;
+}) {
+  const context = (prompt.payload as { context?: string }).context ?? null;
+  const [submitting, setSubmitting] = useState(false);
+
+  const handlePick = async (value: string) => {
+    if (submitting) return;
+    setSubmitting(true);
+    try {
+      await onRespond(value);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <article className="hairline relative border-l-2 border-l-brass bg-brass/[0.04] py-4 pl-5 pr-4 enter-rise">
+      <header className="flex items-baseline justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <span className="pulse-cinnabar h-1 w-1 self-center rounded-full bg-brass" />
+          <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+            agent · clarifying question
+          </span>
+        </div>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+          one-shot
+        </span>
+      </header>
+
+      {context && (
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-paper-mute">{context}</p>
+      )}
+
+      <h3 className="display-sm mt-3 max-w-3xl text-2xl text-paper">{prompt.question}</h3>
+
+      {prompt.options.length > 0 && (
+        <div className="mt-5 flex flex-wrap gap-2">
+          {prompt.options.map((opt) => {
+            const isSkip = /^skip/i.test(opt);
+            return (
+              <button
+                key={opt}
+                onClick={() => handlePick(opt)}
+                disabled={submitting}
+                className={cn(
+                  "rounded-full border px-4 py-1.5 font-sans text-sm transition-colors",
+                  submitting && "cursor-not-allowed opacity-50",
+                  isSkip
+                    ? "border-paper-mute/20 bg-transparent text-paper-mute hover:border-paper-mute/40 hover:text-paper"
+                    : "border-brass/40 bg-brass/[0.06] text-paper hover:border-brass hover:bg-brass/15"
+                )}
+              >
+                {opt}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <p className="mt-5 max-w-2xl text-xs leading-relaxed text-paper-mute">
+        Pick an option above, or type a custom answer in the chat below — anything you send
+        becomes the agent's direction for this question.
+      </p>
+    </article>
   );
 }
 
