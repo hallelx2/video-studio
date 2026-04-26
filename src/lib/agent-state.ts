@@ -439,6 +439,10 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
           message: event.message ?? null,
           artifacts: event.artifacts,
         };
+        // The run is over — any prompt that was outstanding is moot. Clearing
+        // here means the composer treats the next user message as a follow-up
+        // (new run) instead of routing it to a dead `agent:respond` IPC.
+        state.pendingPrompt = null;
         if (event.status === "success") {
           state.status = "complete";
           // Mark all unfinished stages complete and the synthetic 'done' active.
@@ -481,6 +485,9 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
           state.fatalError = { scope: event.scope ?? null, message: event.message };
           state.status = "error";
           state.metrics.endedAt = ts;
+          // Same reason as in `result` — the agent is gone, so any pending
+          // prompt would only route the next message to a dead IPC handler.
+          state.pendingPrompt = null;
           const active = state.stages.find((s) => s.status === "active");
           if (active) active.status = "error";
         }

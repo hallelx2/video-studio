@@ -264,7 +264,22 @@ export class AgentBridge {
   }
 
   async respond(promptId: string, response: string): Promise<void> {
-    if (!this.proc) throw new Error("no agent run is active");
+    if (!this.proc) {
+      // The renderer raced with a state update — typically the agent crashed
+      // at the prompt gate and the user clicked approve/cancel before the
+      // fatal-error event cleared the pending prompt. Don't throw through
+      // IPC (that becomes an Electron uncaught-handler error in the main
+      // process log). Surface a soft recoverable error so the UI can show
+      // a helpful nudge and the user can start a fresh run.
+      this.emit({
+        type: "error",
+        scope: "agent-respond",
+        message:
+          "The agent had already exited when this response arrived. Send a new message to start a fresh run.",
+        recoverable: true,
+      });
+      return;
+    }
     const line = JSON.stringify({ type: "prompt-response", id: promptId, response }) + "\n";
     this.proc.stdin.write(line);
   }
