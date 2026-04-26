@@ -161,9 +161,20 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     briefPath,
     projectWorkspacePath,
     formats: opts.formats,
+    videoType: opts.videoType,
   });
 
-  if (resume.resumedFrom) {
+  if (resume.invalidationNote) {
+    // The workspace has stale artifacts from a previous run with a
+    // different video-type. Surface explicitly so the user knows why
+    // we're regenerating instead of resuming.
+    emit({
+      type: "progress",
+      phase: "reading_source",
+      message: resume.invalidationNote,
+      progress: 0.05,
+    });
+  } else if (resume.resumedFrom) {
     emit({
       type: "progress",
       phase: "reading_source",
@@ -513,6 +524,10 @@ interface ResumeReport {
   /** Free-form "stage we resumed from" string for the progress toast. */
   resumedFrom: string | null;
   foundArtifacts: string[];
+  /** When set, explains why we're NOT resuming despite finding artifacts —
+   *  e.g. the workspace's script.json is from a different videoType, so
+   *  every downstream artifact is stale and gets regenerated. */
+  invalidationNote: string | null;
   skipReadSource: boolean;
   skipDraftScript: boolean;
   skipNarration: boolean;
@@ -525,54 +540,91 @@ async function detectResume(args: {
   briefPath: string;
   projectWorkspacePath: string;
   formats: string[];
+  /** Current run's videoType — compared against the stored script's videoType
+   *  to decide whether the on-disk script (and everything derived from it)
+   *  is still valid. */
+  videoType: string;
 }): Promise<ResumeReport> {
   const found: string[] = [];
+  let invalidationNote: string | null = null;
 
   const hasScript = await isReadableFile(args.scriptPath);
   const hasDesign = await isReadableFile(args.designPath);
   const hasBrief = await isReadableFile(args.briefPath);
   if (hasDesign) found.push("DESIGN.md");
   if (hasBrief) found.push("source-brief.md");
-  if (hasScript) found.push("script.json");
 
-  // Stage 1 (read source) lays down DESIGN.md + source-brief.md. If both are
-  // present we can re-use the same context without re-reading the source.
+  // Stage 1 (read source) lays down DESIGN.md + source-brief.md. Brief and
+  // design are video-type-agnostic so they can be reused across different
+  // video types of the same project.
   const skipReadSource = hasDesign && hasBrief;
 
-  // Stage 3 (draft script) writes script.json. If it parses + has scenes,
-  // skip the draft and go straight to the approval gate.
+  // Stage 3 (draft script): the script is only reusable if its videoType
+  // matches the current run's videoType. Otherwise scene IDs and counts
+  // differ and every downstream artifact (narration, compositions) is stale.
   let skipDraftScript = false;
+  let scriptScenes: ScriptScene[] = [];
   if (hasScript) {
     const preview = await readScriptPreview(args.scriptPath);
-    skipDraftScript = !!preview && Array.isArray(preview.scenes) && preview.scenes.length > 0;
-  }
+    if (preview && Array.isArray(preview.scenes) && preview.scenes.length > 0) {
+      const storedVideoType = (() => {
+        try {
+          const parsed = JSON.parse(preview.raw ?? "{}") as { videoType?: string };
+          return parsed.videoType ?? null;
+        } catch {
+          return null;
+        }
+      })();
 
-  // Stage 4 (narration) writes WAVs into <workspace>/narration/. If we have
-  // a wav per scene id, we can skip TTS.
-  let skipNarration = false;
-  if (skipDraftScript) {
-    const preview = await readScriptPreview(args.scriptPath);
-    const scenes = preview?.scenes ?? [];
-    if (scenes.length > 0) {
-      const narrationDir = join(args.projectWorkspacePath, "narration");
-      const wavs = await listFiles(narrationDir);
-      const sceneIdsCovered = scenes.every((s) =>
-        wavs.some((f) => f.startsWith(s.id) && f.endsWith(".wav"))
-      );
-      skipNarration = sceneIdsCovered && wavs.length > 0;
-      if (skipNarration) found.push(`${wavs.length} narration WAVs`);
+      if (storedVideoType && storedVideoType === args.videoType) {
+        skipDraftScript = true;
+        scriptScenes = preview.scenes;
+        found.push("script.json");
+      } else if (storedVideoType && storedVideoType !== args.videoType) {
+        invalidationNote = `Workspace has script.json for videoType "${storedVideoType}" but you asked for "${args.videoType}" — regenerating script + narration + compositions from scratch`;
+      } else {
+        // No videoType stored; assume the script predates the field. Trust
+        // the scene structure and skip the draft.
+        skipDraftScript = true;
+        scriptScenes = preview.scenes;
+        found.push("script.json");
+      }
     }
   }
 
-  // Stage 5 (compose) writes <aspect>/index.html for each requested format.
-  const aspects = aspectsFromFormats(args.formats);
-  const compositionsExist = await Promise.all(
-    aspects.map((aspect) =>
-      isReadableFile(join(args.projectWorkspacePath, aspect, "index.html"))
-    )
-  );
-  const skipCompose = compositionsExist.length > 0 && compositionsExist.every(Boolean);
-  if (skipCompose) found.push(`${aspects.length} compositions`);
+  // Stage 4 (narration) writes WAVs into <workspace>/narration/. Only valid
+  // when the script is also valid (cascade): if we're going to re-draft the
+  // script the new scene IDs probably won't match the cached WAVs anyway.
+  let skipNarration = false;
+  if (skipDraftScript && scriptScenes.length > 0) {
+    const narrationDir = join(args.projectWorkspacePath, "narration");
+    const wavs = await listFiles(narrationDir);
+    const sceneIdsCovered = scriptScenes.every((s) =>
+      wavs.some((f) => f.startsWith(s.id) && f.endsWith(".wav"))
+    );
+    skipNarration = sceneIdsCovered && wavs.length > 0;
+    if (skipNarration) {
+      const matching = wavs.filter((f) =>
+        scriptScenes.some((s) => f.startsWith(s.id))
+      );
+      found.push(`${matching.length}/${scriptScenes.length} narration WAVs`);
+    }
+  }
+
+  // Stage 5 (compose): only valid when narration is also valid (cascade).
+  // Otherwise the compositions reference audio files whose IDs don't match
+  // the current script — exactly the broken-preview scenario.
+  let skipCompose = false;
+  if (skipNarration) {
+    const aspects = aspectsFromFormats(args.formats);
+    const compositionsExist = await Promise.all(
+      aspects.map((aspect) =>
+        isReadableFile(join(args.projectWorkspacePath, aspect, "index.html"))
+      )
+    );
+    skipCompose = compositionsExist.length > 0 && compositionsExist.every(Boolean);
+    if (skipCompose) found.push(`${aspects.length} compositions`);
+  }
 
   // Free-form "where we picked up" label for the toast.
   let resumedFrom: string | null = null;
@@ -584,6 +636,7 @@ async function detectResume(args: {
   return {
     resumedFrom,
     foundArtifacts: found,
+    invalidationNote,
     skipReadSource,
     skipDraftScript,
     skipNarration,
