@@ -26,12 +26,38 @@ import {
 } from "../lib/types.js";
 import { cn } from "../lib/cn.js";
 
+/**
+ * Settings page — tabbed.
+ *
+ * The earlier flat layout listed all twelve sections in one scroll column
+ * which felt heavy and made the page feel like a spec sheet. Split into
+ * six tabs grouped by intent (System · General · Folders · Agent · Video
+ * · Advanced) so every panel fits on one screen and the user is never
+ * scrolling past unrelated knobs to reach the one they wanted.
+ *
+ * The Save button stays in the header — it operates on the whole config
+ * regardless of which tab is open, so changes across tabs persist in a
+ * single round-trip.
+ */
+
+type SettingsTab = "system" | "general" | "folders" | "agent" | "video" | "advanced";
+
+const TABS: Array<{ id: SettingsTab; label: string; description: string }> = [
+  { id: "system", label: "System", description: "Dependencies & health" },
+  { id: "general", label: "General", description: "Profile · theme · notifications" },
+  { id: "folders", label: "Folders", description: "Projects · workspace · output" },
+  { id: "agent", label: "Agent", description: "Runtime · model · persona" },
+  { id: "video", label: "Video", description: "Voice · type · render" },
+  { id: "advanced", label: "Advanced", description: "Preview port" },
+];
+
 export function SettingsRoute() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [savedAt, setSavedAt] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [healthLoading, setHealthLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("system");
 
   useEffect(() => {
     getConfig().then(setConfig).catch(() => setConfig(DEFAULT_CONFIG));
@@ -112,228 +138,280 @@ export function SettingsRoute() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-12 py-12">
-        <div className="mx-auto max-w-3xl space-y-16">
-          {/* ─── System status ──────────────────────────────────────────── */}
-          <Section
-            eyebrow="00"
-            title="System status"
-            action={
-              <button
-                onClick={refreshHealth}
-                disabled={healthLoading}
-                className={cn(
-                  "border-b pb-0.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
-                  healthLoading
-                    ? "cursor-not-allowed border-paper-mute/30 text-paper-mute/40"
-                    : "border-cinnabar text-cinnabar hover:text-paper"
-                )}
+      <div className="flex flex-1 overflow-hidden">
+        {/* ─── Tab rail ─────────────────────────────────────────────────── */}
+        <aside className="hairline w-64 shrink-0 overflow-y-auto border-r px-6 py-10">
+          <p className="mb-4 px-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+            sections
+          </p>
+          <ul className="space-y-0.5">
+            {TABS.map((tab) => {
+              const isActive = tab.id === activeTab;
+              return (
+                <li key={tab.id}>
+                  <button
+                    onClick={() => setActiveTab(tab.id)}
+                    className={cn(
+                      "block w-full rounded px-3 py-2.5 text-left transition-colors",
+                      isActive
+                        ? "bg-ink-raised text-paper"
+                        : "text-paper-mute hover:bg-ink-edge hover:text-paper"
+                    )}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+                          isActive ? "bg-cinnabar" : "bg-paper-mute/30"
+                        )}
+                      />
+                      <span className="text-sm font-medium">{tab.label}</span>
+                    </span>
+                    <span className="ml-[18px] mt-0.5 block text-[11px] leading-snug text-paper-mute/70">
+                      {tab.description}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </aside>
+
+        {/* ─── Active tab content ───────────────────────────────────────── */}
+        <main className="flex-1 overflow-y-auto px-12 py-12">
+          <div className="max-w-2xl space-y-12">
+            {activeTab === "system" && (
+              <Section
+                title="System status"
+                description="Live detection of every dependency the agent and renderer reach for. Re-run after installing a tool to confirm it's wired up."
+                action={
+                  <button
+                    onClick={refreshHealth}
+                    disabled={healthLoading}
+                    className={cn(
+                      "border-b pb-0.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
+                      healthLoading
+                        ? "cursor-not-allowed border-paper-mute/30 text-paper-mute/40"
+                        : "border-cinnabar text-cinnabar hover:text-paper"
+                    )}
+                  >
+                    {healthLoading ? "checking…" : "re-check"}
+                  </button>
+                }
               >
-                {healthLoading ? "checking…" : "re-check"}
-              </button>
-            }
-          >
-            {health ? (
-              <ul className="grid grid-cols-1 gap-px overflow-hidden rounded border border-brass-line bg-brass-line">
-                {health.entries.map((entry) => (
-                  <li key={entry.key}>
-                    <HealthRow entry={entry} />
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-                {healthLoading ? "checking…" : "no report yet"}
-              </p>
+                {health ? (
+                  <ul className="grid grid-cols-1 gap-px overflow-hidden rounded border border-brass-line bg-brass-line">
+                    {health.entries.map((entry) => (
+                      <li key={entry.key}>
+                        <HealthRow entry={entry} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                    {healthLoading ? "checking…" : "no report yet"}
+                  </p>
+                )}
+              </Section>
             )}
-          </Section>
 
-          {/* ─── Profile ───────────────────────────────────────────────── */}
-          <Section eyebrow="01" title="Profile">
-            <TextField
-              label="Profile name"
-              value={config.profileName}
-              placeholder="e.g. Personal, Work, Client A"
-              onChange={(v) => update("profileName", v)}
-            />
-          </Section>
+            {activeTab === "general" && (
+              <>
+                <Section eyebrow="01" title="Profile">
+                  <TextField
+                    label="Profile name"
+                    value={config.profileName}
+                    placeholder="e.g. Personal, Work, Client A"
+                    onChange={(v) => update("profileName", v)}
+                  />
+                </Section>
 
-          {/* ─── Theme ─────────────────────────────────────────────────── */}
-          <Section eyebrow="02" title="Theme">
-            <RadioGrid
-              options={[
-                { id: "noir", label: "Atelier Noir", description: "Deep ink canvas. The default." },
-                { id: "creme", label: "Atelier Crème", description: "Warm paper canvas. Same identity in daylight." },
-              ]}
-              activeId={config.theme}
-              onPick={(id) => update("theme", id as ThemeId)}
-            />
-          </Section>
+                <Section eyebrow="02" title="Theme">
+                  <RadioGrid
+                    options={[
+                      { id: "noir", label: "Atelier Noir", description: "Deep ink canvas. The default." },
+                      { id: "creme", label: "Atelier Crème", description: "Warm paper canvas. Same identity in daylight." },
+                    ]}
+                    activeId={config.theme}
+                    onPick={(id) => update("theme", id as ThemeId)}
+                  />
+                </Section>
 
-          {/* ─── Folders ───────────────────────────────────────────────── */}
-          <Section eyebrow="03" title="Folders">
-            <Row
-              label="Projects folder"
-              value={config.orgProjectsPath}
-              required
-              placeholder="Required — the folder that holds your product repos"
-              onPick={pickOrg}
-            />
-            <Row
-              label="Workspace"
-              value={config.workspacePath}
-              placeholder="Optional — where HyperFrames projects are created (defaults to app data)"
-              onPick={pickWorkspace}
-            />
-            <Row
-              label="Output directory"
-              value={config.outputDirectory}
-              placeholder="Optional — where rendered MP4s land (defaults to workspace/<project>/output)"
-              onPick={pickOutput}
-            />
-          </Section>
+                <Section eyebrow="03" title="Notifications">
+                  <ToggleRow
+                    label="Native OS notifications"
+                    description="Fire when the agent reaches an approval gate, finishes a render, or hits a fatal error — only if the window isn't focused."
+                    value={config.notificationsEnabled}
+                    onChange={(v) => update("notificationsEnabled", v)}
+                  />
+                </Section>
+              </>
+            )}
 
-          {/* ─── Agent runtime ─────────────────────────────────────────── */}
-          <Section eyebrow="04" title="Agent runtime">
-            <p className="mb-3 text-xs leading-relaxed text-paper-mute">
-              The CLI that drives the agent loop. Today only Claude Code is wired —
-              Codex and Cursor support are queued for a future release.
-            </p>
-            <RadioGrid
-              options={RUNTIME_OPTIONS.map((r) => ({
-                id: r.id,
-                label: r.label,
-                description: r.description,
-                disabled: !r.available,
-                badge: r.available ? null : "soon",
-              }))}
-              activeId={config.runtime}
-              onPick={(id) => update("runtime", id as AgentRuntime)}
-            />
-          </Section>
-
-          {/* ─── Default model ─────────────────────────────────────────── */}
-          <Section eyebrow="05" title="Default Claude model">
-            <RadioGrid
-              options={MODEL_OPTIONS.map((m) => ({
-                id: m.id,
-                label: m.label,
-                description: m.description,
-              }))}
-              activeId={config.selectedModel}
-              onPick={(id) => update("selectedModel", id)}
-            />
-          </Section>
-
-          {/* ─── Default persona ───────────────────────────────────────── */}
-          <Section eyebrow="06" title="Default persona">
-            <RadioGrid
-              options={PERSONAS.map((p) => ({
-                id: p.id,
-                label: p.label,
-                description: p.description,
-              }))}
-              activeId={config.selectedPersona}
-              onPick={(id) => update("selectedPersona", id)}
-            />
-          </Section>
-
-          {/* ─── Default narrator voice ────────────────────────────────── */}
-          <Section eyebrow="07" title="Default narrator voice">
-            <RadioGrid
-              options={VOICE_OPTIONS.map((v) => ({
-                id: v.id,
-                label: v.label,
-                description: v.description,
-                tag: v.id,
-              }))}
-              activeId={config.ttsVoice}
-              onPick={(id) => update("ttsVoice", id)}
-            />
-          </Section>
-
-          {/* ─── Default video type ────────────────────────────────────── */}
-          <Section eyebrow="08" title="Default video type">
-            <RadioGrid
-              options={VIDEO_TYPES.map((v) => ({
-                id: v.id,
-                label: v.label,
-                description: v.description,
-                tag: `${v.defaultScenes} scenes · ${v.defaultDuration}s`,
-              }))}
-              activeId={config.defaultVideoType}
-              onPick={(id) => update("defaultVideoType", id as VideoType)}
-            />
-          </Section>
-
-          {/* ─── Render preferences ────────────────────────────────────── */}
-          <Section eyebrow="09" title="Render preferences">
-            <p className="mb-3 text-xs leading-relaxed text-paper-mute">
-              Passed through to <span className="font-mono text-paper">npx hyperframes render</span>.
-              Quality affects bitrate and final-pass duration; FPS affects render time
-              and motion smoothness. 60fps roughly doubles render time.
-            </p>
-            <div className="space-y-3">
-              <div>
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-                  Quality
-                </p>
-                <RadioGrid
-                  options={RENDER_QUALITY_OPTIONS.map((q) => ({
-                    id: q.id,
-                    label: q.label,
-                    description: q.description,
-                  }))}
-                  activeId={config.renderQuality}
-                  onPick={(id) => update("renderQuality", id as RenderQuality)}
+            {activeTab === "folders" && (
+              <Section
+                title="Folders"
+                description="Where the agent reads source projects and where it writes HyperFrames workspaces and rendered MP4s."
+              >
+                <Row
+                  label="Projects folder"
+                  value={config.orgProjectsPath}
+                  required
+                  placeholder="Required — the folder that holds your product repos"
+                  onPick={pickOrg}
                 />
-              </div>
-              <div>
-                <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-                  FPS
-                </p>
-                <div className="flex gap-2">
-                  {RENDER_FPS_OPTIONS.map((fps) => (
-                    <button
-                      key={fps}
-                      onClick={() => update("renderFps", fps as RenderFps)}
-                      className={cn(
-                        "rounded border px-4 py-2 font-mono text-xs tabular transition-colors",
-                        config.renderFps === fps
-                          ? "border-cinnabar bg-cinnabar/10 text-cinnabar"
-                          : "border-paper-mute/15 text-paper hover:border-paper-mute/30"
-                      )}
-                    >
-                      {fps}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </Section>
+                <Row
+                  label="Workspace"
+                  value={config.workspacePath}
+                  placeholder="Optional — where HyperFrames projects are created (defaults to app data)"
+                  onPick={pickWorkspace}
+                />
+                <Row
+                  label="Output directory"
+                  value={config.outputDirectory}
+                  placeholder="Optional — where rendered MP4s land (defaults to workspace/<project>/output)"
+                  onPick={pickOutput}
+                />
+              </Section>
+            )}
 
-          {/* ─── Notifications ─────────────────────────────────────────── */}
-          <Section eyebrow="10" title="Notifications">
-            <ToggleRow
-              label="Native OS notifications"
-              description="Fire when the agent reaches an approval gate, finishes a render, or hits a fatal error — only if the window isn't focused."
-              value={config.notificationsEnabled}
-              onChange={(v) => update("notificationsEnabled", v)}
-            />
-          </Section>
+            {activeTab === "agent" && (
+              <>
+                <Section
+                  eyebrow="01"
+                  title="Runtime"
+                  description="The CLI that drives the agent loop. Today only Claude Code is wired — Codex and Cursor support are queued for a future release."
+                >
+                  <RadioGrid
+                    options={RUNTIME_OPTIONS.map((r) => ({
+                      id: r.id,
+                      label: r.label,
+                      description: r.description,
+                      disabled: !r.available,
+                      badge: r.available ? null : "soon",
+                    }))}
+                    activeId={config.runtime}
+                    onPick={(id) => update("runtime", id as AgentRuntime)}
+                  />
+                </Section>
 
-          {/* ─── Advanced ──────────────────────────────────────────────── */}
-          <Section eyebrow="11" title="Advanced">
-            <NumberField
-              label="HyperFrames preview port"
-              description="Port the dev server binds to when you launch a composition preview."
-              value={config.previewPort}
-              min={1024}
-              max={65535}
-              onChange={(v) => update("previewPort", v)}
-            />
-          </Section>
-        </div>
+                <Section eyebrow="02" title="Default Claude model">
+                  <RadioGrid
+                    options={MODEL_OPTIONS.map((m) => ({
+                      id: m.id,
+                      label: m.label,
+                      description: m.description,
+                    }))}
+                    activeId={config.selectedModel}
+                    onPick={(id) => update("selectedModel", id)}
+                  />
+                </Section>
+
+                <Section eyebrow="03" title="Default persona">
+                  <RadioGrid
+                    options={PERSONAS.map((p) => ({
+                      id: p.id,
+                      label: p.label,
+                      description: p.description,
+                    }))}
+                    activeId={config.selectedPersona}
+                    onPick={(id) => update("selectedPersona", id)}
+                  />
+                </Section>
+              </>
+            )}
+
+            {activeTab === "video" && (
+              <>
+                <Section eyebrow="01" title="Default narrator voice">
+                  <RadioGrid
+                    options={VOICE_OPTIONS.map((v) => ({
+                      id: v.id,
+                      label: v.label,
+                      description: v.description,
+                      tag: v.id,
+                    }))}
+                    activeId={config.ttsVoice}
+                    onPick={(id) => update("ttsVoice", id)}
+                  />
+                </Section>
+
+                <Section eyebrow="02" title="Default video type">
+                  <RadioGrid
+                    options={VIDEO_TYPES.map((v) => ({
+                      id: v.id,
+                      label: v.label,
+                      description: v.description,
+                      tag: `${v.defaultScenes} scenes · ${v.defaultDuration}s`,
+                    }))}
+                    activeId={config.defaultVideoType}
+                    onPick={(id) => update("defaultVideoType", id as VideoType)}
+                  />
+                </Section>
+
+                <Section
+                  eyebrow="03"
+                  title="Render preferences"
+                  description="Passed through to npx hyperframes render. Quality affects bitrate and final-pass duration; FPS affects render time and motion smoothness. 60 fps roughly doubles render time."
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                        Quality
+                      </p>
+                      <RadioGrid
+                        options={RENDER_QUALITY_OPTIONS.map((q) => ({
+                          id: q.id,
+                          label: q.label,
+                          description: q.description,
+                        }))}
+                        activeId={config.renderQuality}
+                        onPick={(id) => update("renderQuality", id as RenderQuality)}
+                      />
+                    </div>
+                    <div>
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                        FPS
+                      </p>
+                      <div className="flex gap-2">
+                        {RENDER_FPS_OPTIONS.map((fps) => (
+                          <button
+                            key={fps}
+                            onClick={() => update("renderFps", fps as RenderFps)}
+                            className={cn(
+                              "rounded border px-4 py-2 font-mono text-xs tabular transition-colors",
+                              config.renderFps === fps
+                                ? "border-cinnabar bg-cinnabar/10 text-cinnabar"
+                                : "border-paper-mute/15 text-paper hover:border-paper-mute/30"
+                            )}
+                          >
+                            {fps}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </Section>
+              </>
+            )}
+
+            {activeTab === "advanced" && (
+              <Section
+                title="Advanced"
+                description="Knobs that most people will never need to touch."
+              >
+                <NumberField
+                  label="HyperFrames preview port"
+                  description="Port the dev server binds to when you launch a composition preview."
+                  value={config.previewPort}
+                  min={1024}
+                  max={65535}
+                  onChange={(v) => update("previewPort", v)}
+                />
+              </Section>
+            )}
+          </div>
+        </main>
       </div>
     </div>
   );
@@ -344,24 +422,35 @@ export function SettingsRoute() {
 function Section({
   eyebrow,
   title,
+  description,
   action,
   children,
 }: {
-  eyebrow: string;
+  eyebrow?: string;
   title: string;
+  description?: string;
   action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section>
-      <header className="mb-6 flex items-end justify-between">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-            {eyebrow}
-          </p>
-          <h2 className="display-sm mt-2 text-2xl text-paper">{title}</h2>
+      <header className="mb-6 flex items-end justify-between gap-6">
+        <div className="min-w-0 flex-1">
+          {eyebrow && (
+            <p className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
+              {eyebrow}
+            </p>
+          )}
+          <h2 className={cn("display-sm text-2xl text-paper", eyebrow && "mt-2")}>
+            {title}
+          </h2>
+          {description && (
+            <p className="mt-2 max-w-prose text-xs leading-relaxed text-paper-mute">
+              {description}
+            </p>
+          )}
         </div>
-        {action}
+        {action && <div className="shrink-0">{action}</div>}
       </header>
       {children}
     </section>
@@ -509,7 +598,7 @@ function Row({
   return (
     <button
       onClick={onPick}
-      className="hairline flex w-full items-center justify-between border bg-ink-raised px-5 py-4 text-left transition-colors hover:bg-ink-edge"
+      className="hairline mb-2 flex w-full items-center justify-between border bg-ink-raised px-5 py-4 text-left transition-colors last:mb-0 hover:bg-ink-edge"
     >
       <span className="block min-w-0 flex-1">
         <span className="flex items-center gap-3">
