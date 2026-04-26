@@ -48,17 +48,53 @@ async function waitForDist(timeoutMs = 30_000) {
   return false;
 }
 
-function killCurrent() {
+/**
+ * Kill the current electron child AND wait for it (and its GPU / renderer /
+ * utility children) to fully exit before resolving. On Windows, simply
+ * spawning a new electron right after kill() races Chromium's cleanup —
+ * the singleton lock, Cache/, and gpu_disk_cache files are still held by
+ * the dying child processes for a few hundred ms. Without this wait the
+ * new instance hits ERROR:process_singleton_win, ERROR:cache_util_win,
+ * ERROR:disk_cache, and refuses to boot.
+ */
+async function killCurrent() {
   if (!electronProc) return;
   const proc = electronProc;
   electronProc = null;
-  proc.kill(process.platform === "win32" ? undefined : "SIGTERM");
-  // On Windows .kill() is best-effort; the process may linger briefly but
-  // that's fine — the new electron will bind to a different window handle.
+
+  await new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    proc.once("exit", finish);
+    // SIGTERM first; SIGKILL after 1500ms if it hasn't exited.
+    proc.kill(process.platform === "win32" ? undefined : "SIGTERM");
+    setTimeout(() => {
+      if (!proc.killed) {
+        try {
+          proc.kill("SIGKILL");
+        } catch {
+          // process may already be gone
+        }
+      }
+    }, 1500);
+    // Hard ceiling so a wedged process doesn't stall the dev loop forever.
+    setTimeout(finish, 5000);
+  });
+
+  // Extra grace period for Chromium's child processes (GPU, utility,
+  // renderer) to release file locks on Windows. Without this, the new
+  // electron beats the cleanup to the singleton/cache files and crashes.
+  if (process.platform === "win32") {
+    await new Promise((r) => setTimeout(r, 600));
+  }
 }
 
 async function startElectron() {
-  killCurrent();
+  await killCurrent();
   const ok = await waitForDist();
   if (!ok) {
     console.error("[dev-electron] dist/main.js never appeared — is tsc -w running?");
@@ -126,14 +162,15 @@ if (existsSync(distDir)) {
 }
 
 // ─── Shutdown ─────────────────────────────────────────────────────────────
-const cleanup = () => {
+const cleanup = async () => {
+  if (shuttingDown) return;
   shuttingDown = true;
-  killCurrent();
+  await killCurrent().catch(() => undefined);
   process.exit(0);
 };
-process.on("SIGINT", cleanup);
-process.on("SIGTERM", cleanup);
-process.on("beforeExit", cleanup);
+process.on("SIGINT", () => void cleanup());
+process.on("SIGTERM", () => void cleanup());
+process.on("beforeExit", () => void cleanup());
 
 // ─── Stream filtering ─────────────────────────────────────────────────────
 // Chromium emits a few log messages through Electron's stdio that aren't
