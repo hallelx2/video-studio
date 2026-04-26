@@ -28,6 +28,17 @@ const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const agent = new AgentBridge();
 let mainWindow: BrowserWindow | null = null;
 
+/** Apply config-driven flags (notifications etc) to the bridge. Called on
+ *  bootstrap and after every config:save. */
+async function syncConfigToBridge(): Promise<void> {
+  try {
+    const cfg = await loadConfig();
+    agent.applyConfig({ notificationsEnabled: cfg.notificationsEnabled });
+  } catch {
+    // first-run / corrupt config — bridge keeps its defaults
+  }
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -79,8 +90,9 @@ if (!gotLock) {
 }
 
 // ─── App lifecycle ─────────────────────────────────────────────────────────
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   registerIpcHandlers();
+  await syncConfigToBridge();
   createWindow();
 
   app.on("activate", () => {
@@ -102,7 +114,12 @@ app.on("before-quit", async () => {
 function registerIpcHandlers(): void {
   ipcMain.handle("config:get", async () => loadConfig());
 
-  ipcMain.handle("config:save", async (_, config: AppConfig) => saveConfig(config));
+  ipcMain.handle("config:save", async (_, config: AppConfig) => {
+    await saveConfig(config);
+    // Live-apply config-driven flags (notifications etc) to the bridge so
+    // the renderer doesn't need an extra IPC round-trip after toggling.
+    agent.applyConfig({ notificationsEnabled: config.notificationsEnabled });
+  });
 
   ipcMain.handle("projects:list", async () => {
     const config = await loadConfig();
@@ -184,7 +201,8 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle("preview:start", async (_, workspacePath: string) => {
-    return agent.startPreview(workspacePath);
+    const cfg = await loadConfig().catch(() => null);
+    return agent.startPreview(workspacePath, cfg?.previewPort);
   });
 
   ipcMain.handle("preview:stop", async () => {

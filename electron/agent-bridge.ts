@@ -20,9 +20,18 @@ export class AgentBridge {
   private previewWorkspace: string | null = null;
   private window: BrowserWindow | null = null;
   private buffer = "";
+  /** Toggled by config; when false, maybeNotify() short-circuits silently. */
+  private notificationsEnabled = true;
 
   attachWindow(win: BrowserWindow): void {
     this.window = win;
+  }
+
+  /** Wire config-driven flags. Called from main.ts after each config save. */
+  applyConfig(cfg: { notificationsEnabled?: boolean }): void {
+    if (typeof cfg.notificationsEnabled === "boolean") {
+      this.notificationsEnabled = cfg.notificationsEnabled;
+    }
   }
 
   isRunning(): boolean {
@@ -46,7 +55,8 @@ export class AgentBridge {
     };
   }
 
-  async startPreview(workspacePath: string, port = 3002): Promise<{ url: string }> {
+  async startPreview(workspacePath: string, port?: number): Promise<{ url: string }> {
+    const resolvedPort = port ?? 3002;
     // If a preview is already running for the same workspace, reuse it.
     if (this.isPreviewRunning() && this.previewWorkspace === workspacePath && this.previewUrl) {
       return { url: this.previewUrl };
@@ -57,7 +67,7 @@ export class AgentBridge {
     }
 
     const npx = process.platform === "win32" ? "npx.cmd" : "npx";
-    const proc = spawn(npx, ["hyperframes", "preview", "--port", String(port)], {
+    const proc = spawn(npx, ["hyperframes", "preview", "--port", String(resolvedPort)], {
       cwd: workspacePath,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
@@ -66,7 +76,7 @@ export class AgentBridge {
 
     this.previewProc = proc;
     this.previewWorkspace = workspacePath;
-    this.previewUrl = `http://localhost:${port}`;
+    this.previewUrl = `http://localhost:${resolvedPort}`;
 
     proc.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
@@ -175,6 +185,14 @@ export class AgentBridge {
           WORKSPACE_PATH: workspaceRoot,
           TTS_VOICE: config.ttsVoice,
           CLAUDE_MODEL: req.model ?? config.selectedModel,
+          // Render preferences — the agent task reads these from env when
+          // composing the Stage 6 render commands.
+          RENDER_QUALITY: config.renderQuality ?? "standard",
+          RENDER_FPS: String(config.renderFps ?? 30),
+          ...(config.outputDirectory ? { OUTPUT_DIRECTORY: config.outputDirectory } : {}),
+          // Preview port for `npx hyperframes preview` — surfaced so the
+          // agent and the bridge agree on the URL.
+          PREVIEW_PORT: String(config.previewPort ?? 3002),
         },
       }
     );
@@ -301,6 +319,7 @@ export class AgentBridge {
     if (!Notification.isSupported()) return;
     if (!this.window || this.window.isDestroyed()) return;
     if (this.window.isFocused()) return;
+    if (!this.notificationsEnabled) return;
 
     let title: string | null = null;
     let body: string | null = null;

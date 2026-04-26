@@ -11,12 +11,16 @@ export {
   VIDEO_TYPES,
   MODEL_OPTIONS,
   PERSONAS,
+  RUNTIME_OPTIONS,
+  RENDER_QUALITY_OPTIONS,
+  RENDER_FPS_OPTIONS,
   findModel,
   findPersona,
 } from "../../electron/types.js";
 
 export type {
   AgentEvent,
+  AgentRuntime,
   AppConfig,
   GenerateRequest,
   HealthEntry,
@@ -24,6 +28,9 @@ export type {
   ModelOption,
   PersonaOption,
   ProjectInfo,
+  RenderFps,
+  RenderQuality,
+  RuntimeOption,
   SessionFile,
   SessionMeta,
   SessionScaffold,

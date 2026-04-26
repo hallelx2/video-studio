@@ -80,18 +80,42 @@ export interface ProjectInfo {
 
 export type ThemeId = "noir" | "creme";
 
+/**
+ * Agent runtime — the binary that drives the agent loop.
+ * Today only `claude-code` is implemented. The other ids are stubs so the
+ * AppConfig schema, the Settings UI, and the bridge dispatch table all
+ * have a place to land when Codex / Cursor support is added later.
+ */
+export type AgentRuntime = "claude-code" | "codex" | "cursor-cli";
+
+export type RenderQuality = "draft" | "standard" | "high";
+export type RenderFps = 24 | 30 | 60;
+
 export interface AppConfig {
   orgProjectsPath: string | null;
   workspacePath: string | null;
   ttsVoice: string;
   defaultFormats: VideoFormat[];
   defaultVideoType: VideoType;
+  /** Which agent runtime to drive the loop with. Today only claude-code is wired. */
+  runtime: AgentRuntime;
   /** Model id passed to the Claude Agent SDK on every run. */
   selectedModel: string;
   /** Persona id whose voicePrompt is appended to the agent system prompt. */
   selectedPersona: string;
   /** Atelier theme — 'noir' (dark) or 'creme' (light). Default 'noir'. */
   theme: ThemeId;
+  /** Render preferences passed through to `npx hyperframes render`. */
+  renderQuality: RenderQuality;
+  renderFps: RenderFps;
+  /** Optional override for where rendered MP4s land. Defaults to workspace/<project>/output. */
+  outputDirectory: string | null;
+  /** Port the HyperFrames preview dev server binds to. */
+  previewPort: number;
+  /** Fire OS notifications for prompt + result + error events when window is unfocused. */
+  notificationsEnabled: boolean;
+  /** Optional display name for the active profile. Free text. */
+  profileName: string;
   onboardingComplete: boolean;
 }
 
@@ -101,11 +125,60 @@ export const DEFAULT_CONFIG: AppConfig = {
   ttsVoice: "af_nova",
   defaultFormats: ["linkedin", "x"],
   defaultVideoType: "product-launch",
+  runtime: "claude-code",
   selectedModel: "claude-opus-4-7",
   selectedPersona: "founder",
   theme: "noir",
+  renderQuality: "standard",
+  renderFps: 30,
+  outputDirectory: null,
+  previewPort: 3002,
+  notificationsEnabled: true,
+  profileName: "Default",
   onboardingComplete: false,
 };
+
+/** Catalog of runtimes — used by the Settings UI to render the picker. */
+export interface RuntimeOption {
+  id: AgentRuntime;
+  label: string;
+  description: string;
+  /** False until we ship support; the Settings UI greys it out + shows 'soon'. */
+  available: boolean;
+}
+
+export const RUNTIME_OPTIONS: RuntimeOption[] = [
+  {
+    id: "claude-code",
+    label: "Claude Code",
+    description: "Anthropic's Claude Code CLI + the Claude Agent SDK. Uses your local subscription auth.",
+    available: true,
+  },
+  {
+    id: "codex",
+    label: "Codex",
+    description: "OpenAI Codex CLI (gpt-5-codex). Requires OPENAI_API_KEY.",
+    available: false,
+  },
+  {
+    id: "cursor-cli",
+    label: "Cursor CLI",
+    description: "Cursor's headless agent. Requires Cursor Pro and the cursor-agent CLI.",
+    available: false,
+  },
+];
+
+export const RENDER_QUALITY_OPTIONS: Array<{
+  id: RenderQuality;
+  label: string;
+  description: string;
+}> = [
+  { id: "draft", label: "Draft", description: "Fast, lower bitrate — for iteration." },
+  { id: "standard", label: "Standard", description: "Balanced — good for review and most delivery." },
+  { id: "high", label: "High", description: "Slowest, highest bitrate — final delivery." },
+];
+
+export const RENDER_FPS_OPTIONS: RenderFps[] = [24, 30, 60];
 
 /** Models the user can pick. The first id is the default. */
 export interface ModelOption {

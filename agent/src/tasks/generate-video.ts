@@ -632,6 +632,14 @@ function stageSixPrompt(args: {
   formats: string[];
   projectWorkspacePath: string;
 }): string {
+  // Honour the render preferences the bridge passes through env. Falls back
+  // to sensible defaults so a stale config doesn't break the pipeline.
+  const quality = process.env.RENDER_QUALITY ?? "standard";
+  const fps = process.env.RENDER_FPS ?? "30";
+  const outputBase = process.env.OUTPUT_DIRECTORY
+    ? `${process.env.OUTPUT_DIRECTORY}`
+    : `${args.projectWorkspacePath}/output`;
+
   const lines = [
     `STAGE 6 — Render.`,
     ``,
@@ -641,10 +649,14 @@ function stageSixPrompt(args: {
   for (const format of args.formats) {
     const aspect = aspectFor(format);
     lines.push(
-      `  cd ${args.projectWorkspacePath}/${aspect} && npx hyperframes render --output ${args.projectWorkspacePath}/output/${format}.mp4 --quality high --fps 30`
+      `  cd ${args.projectWorkspacePath}/${aspect} && npx hyperframes render --output ${outputBase}/${format}.mp4 --quality ${quality} --fps ${fps}`
     );
   }
   lines.push(
+    ``,
+    `Render quality: ${quality} (override via Settings → Render preferences).`,
+    `Render fps: ${fps}.`,
+    `Output directory: ${outputBase}.`,
     ``,
     `Emit a progress message after each render completes, including the final file size and duration.`,
     `If a render fails, emit an error event and continue with the remaining formats — don't abort the run.`
