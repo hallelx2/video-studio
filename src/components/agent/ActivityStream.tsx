@@ -76,7 +76,7 @@ export function ActivityStream({
   };
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden">
       {/* Filter chips */}
       <div className="hairline flex items-center justify-between gap-4 border-b px-12 py-3">
         <div className="flex items-center gap-1">
@@ -126,12 +126,12 @@ export function ActivityStream({
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-12 py-6"
+        className="min-w-0 flex-1 overflow-y-auto px-12 py-6"
       >
         {visible.length === 0 && !pendingPrompt ? (
           <Empty filter={filter} />
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex min-w-0 flex-col gap-2">
             {visible.map((activity, i) => {
               // Turn boundary: every UserActivity (except the very first one
               // in the visible list) starts a new turn — render a hairline

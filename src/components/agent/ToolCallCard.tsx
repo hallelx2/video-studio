@@ -1,4 +1,18 @@
 import { useState } from "react";
+import {
+  FileText,
+  PenLine,
+  Pencil,
+  Terminal,
+  Search,
+  FolderSearch,
+  Globe,
+  Sparkles,
+  ListChecks,
+  NotebookPen,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import type { ToolCallActivity } from "../../lib/agent-state.js";
 import { ToolStatusTitle } from "./ToolStatusTitle.js";
@@ -29,10 +43,12 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
   const isRunning = activity.status === "running";
   const isError = activity.status === "error";
 
+  const Icon = iconFor(activity.toolName);
+
   return (
     <article
       className={cn(
-        "transition-colors",
+        "min-w-0 transition-colors",
         isRunning && "bg-ink-raised/40",
         isError && "bg-alarm/[0.05]"
       )}
@@ -40,12 +56,23 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
       <button
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex w-full items-baseline gap-4 border-l-2 px-4 py-2 text-left transition-colors",
+          "flex w-full min-w-0 items-center gap-3 border-l-2 px-4 py-2 text-left transition-colors",
           isRunning && "border-l-cinnabar",
           !isRunning && !isError && "border-l-brass-line hover:border-l-brass",
           isError && "border-l-alarm"
         )}
       >
+        {/* Tool icon — small, muted, anchored left */}
+        <Icon
+          className={cn(
+            "h-4 w-4 shrink-0 transition-colors",
+            isRunning && "text-cinnabar",
+            isError && "text-alarm",
+            !isRunning && !isError && "text-paper-mute/85"
+          )}
+          aria-hidden
+        />
+
         {/* Title (active/done verb swap) + subtitle (label) */}
         <span className="flex min-w-0 flex-1 items-baseline gap-3">
           <ToolStatusTitle
@@ -53,7 +80,7 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
             activeText={verbs.active}
             doneText={verbs.done}
             className={cn(
-              "shrink-0 font-display text-[15px] font-semibold",
+              "shrink-0 text-sm font-medium",
               isRunning && "text-shimmer-cinnabar",
               isError && "text-alarm",
               !isRunning && !isError && "text-paper"
@@ -62,7 +89,7 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
           {subtitle && (
             <span
               className={cn(
-                "min-w-0 truncate font-mono text-xs",
+                "min-w-0 flex-1 truncate font-mono text-xs",
                 isRunning ? "text-shimmer" : "text-paper-mute"
               )}
             >
@@ -365,6 +392,29 @@ const VERBS: Record<string, Verbs> = {
 function verbsFor(toolName: string): Verbs {
   if (VERBS[toolName]) return VERBS[toolName];
   return { active: `${toolName}…`, done: toolName };
+}
+
+// ─── Tool icon map ────────────────────────────────────────────────────────
+// One small icon per tool kind so the eye can scan a long stream by shape
+// before it reads the title. Anything we don't know about falls back to a
+// generic wrench so the row still renders cleanly.
+
+const TOOL_ICONS: Record<string, LucideIcon> = {
+  Read: FileText,
+  Write: PenLine,
+  Edit: Pencil,
+  Bash: Terminal,
+  Glob: FolderSearch,
+  Grep: Search,
+  WebFetch: Globe,
+  WebSearch: Search,
+  Skill: Sparkles,
+  TodoWrite: ListChecks,
+  NotebookEdit: NotebookPen,
+};
+
+function iconFor(toolName: string): LucideIcon {
+  return TOOL_ICONS[toolName] ?? Wrench;
 }
 
 // ─── Smart label extraction (OpenCode pattern) ────────────────────────────

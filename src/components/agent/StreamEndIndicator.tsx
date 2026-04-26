@@ -163,13 +163,25 @@ function ErrorMarker({ state }: { state: AgentRunState }) {
     state.fatalError?.message ??
     state.result?.message ??
     "An unrecoverable error halted the run.";
+
+  // The bridge folds the recent stderr tail into the message after a
+  // double newline. Split so the headline renders as text and the tail as
+  // a monospace pre-block — much more useful than a blob.
+  const [headline, ...tailParts] = message.split(/\n\n/);
+  const tail = tailParts.join("\n\n");
+
   return (
     <Frame
       tone="alarm"
       label="stopped"
       meta={scope ? <Stat>{scope}</Stat> : null}
     >
-      <p className="mt-2 break-words font-mono text-xs leading-relaxed text-alarm">{message}</p>
+      <p className="mt-2 break-words text-sm leading-relaxed text-alarm">{headline}</p>
+      {tail && (
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded border border-alarm/30 bg-alarm/[0.06] p-2 font-mono text-[11px] leading-relaxed text-alarm">
+          {tail}
+        </pre>
+      )}
     </Frame>
   );
 }

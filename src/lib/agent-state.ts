@@ -299,6 +299,56 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
       }
 
       case "agent_text": {
+        // Defensive: occasionally the agent's stdout pipe leaks a stringified
+        // progress/log event into the assistant text channel — most often
+        // when a child process writes its own NDJSON to stderr. Detect and
+        // re-route so the user never sees raw `{"type":"progress",...}` JSON
+        // rendered as the agent's "voice".
+        const leaked = parseLeakedEvent(event.text);
+        if (leaked && leaked.type === "progress") {
+          const stageId = PHASE_TO_STAGE[leaked.phase ?? ""] ?? null;
+          if (stageId) {
+            for (const stage of state.stages) {
+              if (STAGE_ORDER.indexOf(stage.id) < STAGE_ORDER.indexOf(stageId)) {
+                if (stage.status === "active" || stage.status === "pending") {
+                  stage.status = "complete";
+                  if (stage.endedAt === null) stage.endedAt = ts;
+                }
+              } else if (stage.id === stageId) {
+                if (stage.status === "pending") {
+                  stage.status = "active";
+                  stage.startedAt = ts;
+                }
+                stage.message = leaked.message ?? stage.message;
+                if (typeof leaked.progress === "number") stage.progress = leaked.progress;
+              }
+            }
+            state.currentStageId = stageId;
+          }
+          state.activities.push({
+            kind: "progress",
+            id: `e${i}`,
+            ts,
+            phase: leaked.phase ?? "unknown",
+            message: leaked.message ?? "",
+            progress: typeof leaked.progress === "number" ? leaked.progress : null,
+            stageId,
+          });
+          break;
+        }
+        if (leaked && leaked.type === "log") {
+          state.activities.push({
+            kind: "log",
+            id: `e${i}`,
+            ts,
+            level: leaked.level ?? "info",
+            text: leaked.text ?? "",
+          });
+          break;
+        }
+        // Drop any other leaked control events — they're noise, not voice.
+        if (leaked) break;
+
         state.metrics.assistantBlocks += 1;
         // If we have a messageId and an existing TextActivity for it, append.
         const existingIdx =
@@ -465,6 +515,53 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
   state.artifacts = extractArtifacts(events);
 
   return state;
+}
+
+/**
+ * Detect an agent_text payload that's actually a stringified control event
+ * leaking through the wrong channel. Returns the parsed shape if so, null
+ * otherwise. Cheap fast-path: bail unless the trimmed text starts with `{`
+ * AND contains `"type":"progress"` / `"type":"log"`.
+ *
+ * We intentionally accept only the small set of internal event types we own.
+ * Anything else (including legitimate JSON the agent might quote in its
+ * voice for the user) falls through to normal text rendering.
+ */
+function parseLeakedEvent(text: string): {
+  type: "progress" | "log" | "result" | "error";
+  phase?: string;
+  message?: string;
+  progress?: number;
+  level?: string;
+  text?: string;
+} | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return null;
+  if (
+    !trimmed.includes('"type":"progress"') &&
+    !trimmed.includes('"type":"log"') &&
+    !trimmed.includes('"type":"result"') &&
+    !trimmed.includes('"type":"error"')
+  ) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as Record<string, unknown>;
+    const type = parsed.type;
+    if (type !== "progress" && type !== "log" && type !== "result" && type !== "error") {
+      return null;
+    }
+    return {
+      type,
+      phase: typeof parsed.phase === "string" ? parsed.phase : undefined,
+      message: typeof parsed.message === "string" ? parsed.message : undefined,
+      progress: typeof parsed.progress === "number" ? parsed.progress : undefined,
+      level: typeof parsed.level === "string" ? parsed.level : undefined,
+      text: typeof parsed.text === "string" ? parsed.text : undefined,
+    };
+  } catch {
+    return null;
+  }
 }
 
 function mergeUsage(a: UsageInfo, b: UsageInfo): UsageInfo {

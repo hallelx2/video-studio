@@ -533,8 +533,13 @@ export function WorkbenchRoute({
       />
 
       {/* ─── Workbench body (the rest of the columns) ──────────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-        <div className="hairline flex flex-1 flex-col border-r-0">
+      {/* min-w-0 chain is critical: without it, a long bash command or file
+          path inside ActivityStream forces every flex parent to expand to
+          fit its intrinsic width, pushing ArtifactPanel off the right edge.
+          With min-w-0 the children can actually shrink and `truncate`
+          kicks in to add ellipsis. */}
+      <div className="flex min-w-0 flex-1 overflow-hidden">
+        <div className="hairline flex min-w-0 flex-1 flex-col border-r-0">
 
       {/* Inner header — session title (only shown when there's a session) */}
       {currentSession && (
@@ -552,7 +557,7 @@ export function WorkbenchRoute({
 
       {/* Body — empty state when no events; full workbench once events exist */}
       {hasHistory ? (
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex min-w-0 flex-1 overflow-hidden">
           <aside className="hairline flex w-[280px] shrink-0 flex-col gap-8 overflow-y-auto border-r px-6 py-8 stagger-children">
             <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
               scaffold
@@ -625,9 +630,9 @@ export function WorkbenchRoute({
             </p>
           </aside>
 
-          <section className="flex flex-1 flex-col overflow-hidden">
+          <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <StageTimeline stages={agent.stages} currentStageId={agent.currentStageId} />
-            <div className="relative flex-1 overflow-hidden">
+            <div className="relative min-w-0 flex-1 overflow-hidden">
               <ActivityStream
                 activities={agent.activities}
                 pendingPrompt={agent.pendingPrompt}

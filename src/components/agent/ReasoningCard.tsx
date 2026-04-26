@@ -20,15 +20,15 @@ export function ReasoningCard({ activity }: { activity: TextActivity }) {
   const preview = takePreview(activity.text, 90);
 
   return (
-    <article className="border-l-2 border-l-brass/40 pl-5">
+    <article className="min-w-0 border-l-2 border-l-brass/40 pl-5">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full items-baseline gap-3 py-1 text-left transition-colors hover:bg-ink-raised/30"
+        className="group flex w-full min-w-0 items-baseline gap-3 py-1 text-left transition-colors hover:bg-ink-raised/30"
       >
-        <span className="font-mono text-[10px] uppercase tracking-widest text-brass/80">
+        <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-brass/80">
           thought
         </span>
-        <span className="min-w-0 flex-1 truncate font-display text-sm italic text-paper-mute">
+        <span className="min-w-0 flex-1 truncate text-[13px] text-paper-mute">
           {open ? activity.text.slice(0, 60) + "…" : preview}
         </span>
         <span
@@ -45,7 +45,7 @@ export function ReasoningCard({ activity }: { activity: TextActivity }) {
         <div className="enter-rise pb-2 pl-0 pr-4 pt-1">
           <MarkdownText
             text={activity.text}
-            className="max-w-3xl font-display text-[14px] italic text-paper"
+            className="max-w-3xl text-[13.5px] leading-relaxed text-paper-mute"
           />
         </div>
       )}

@@ -20,6 +20,11 @@ export class AgentBridge {
   private previewWorkspace: string | null = null;
   private window: BrowserWindow | null = null;
   private buffer = "";
+  /** Ring buffer of the most recent stderr lines from the agent — included in
+   *  the agent-exit error message so non-zero exits actually tell the user
+   *  what went wrong instead of just "exited with code 1". */
+  private stderrTail: string[] = [];
+  private static readonly STDERR_TAIL_MAX = 12;
   /** Toggled by config; when false, maybeNotify() short-circuits silently. */
   private notificationsEnabled = true;
 
@@ -199,12 +204,18 @@ export class AgentBridge {
 
     this.proc = proc;
     this.buffer = "";
+    this.stderrTail = [];
 
     proc.stdout.on("data", (chunk: Buffer) => this.handleStdout(chunk));
     proc.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
-      // Forward every stderr line as an agent_log event.
+      // Forward every stderr line as an agent_log event AND keep a ring
+      // buffer of the recent tail so the agent-exit error has context.
       for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        this.stderrTail.push(line);
+        if (this.stderrTail.length > AgentBridge.STDERR_TAIL_MAX) {
+          this.stderrTail.shift();
+        }
         this.emit({ type: "agent_log", level: "stderr", text: line });
       }
     });
@@ -226,13 +237,28 @@ export class AgentBridge {
         this.buffer = "";
       }
       if (code !== 0 && signal !== "SIGTERM") {
+        // Tail the stderr buffer so the user actually sees what failed instead
+        // of a bare "exited with code 1". Skip lines we can confidently ignore
+        // (Node's fixed deprecation warnings, the SDK's own startup banner).
+        const noisyPatterns = [
+          /^\(node:\d+\) /,
+          /^\(Use `node --trace-deprecation/,
+          /^DeprecationWarning:/,
+        ];
+        const usefulTail = this.stderrTail
+          .filter((line) => !noisyPatterns.some((re) => re.test(line)))
+          .slice(-6);
+        const tail = usefulTail.length > 0
+          ? `\n\nlast stderr:\n${usefulTail.join("\n")}`
+          : "";
         this.emit({
           type: "error",
           scope: "agent-exit",
-          message: `agent exited with code ${code}${signal ? ` (signal ${signal})` : ""}`,
+          message: `agent exited with code ${code}${signal ? ` (signal ${signal})` : ""}${tail}`,
           recoverable: false,
         });
       }
+      this.stderrTail = [];
       this.proc = null;
     });
   }
