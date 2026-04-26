@@ -61,11 +61,27 @@ import {
  * pane's empty hero exposes a 'Build' action so the user can kick off a
  * default run without typing — chat is reserved for actual instructions.
  */
-export function WorkbenchRoute() {
-  const { productId } = useParams<{ productId: string }>();
+export function WorkbenchRoute({
+  projectIdOverride,
+  variant,
+}: {
+  /** When provided, takes precedence over the URL :productId — used by the
+   *  Playground route to render the same workbench against a synthetic
+   *  project id (no source-of-truth folder under organisation-projects/). */
+  projectIdOverride?: string;
+  /** Cosmetic variant — Playground hides the "← all projects" link and
+   *  rebrands the empty hero. Workbench-as-Workbench keeps every default. */
+  variant?: "workbench" | "playground";
+} = {}) {
+  const params = useParams<{ productId: string }>();
+  const productId = projectIdOverride ?? params.productId;
   const [searchParams, setSearchParams] = useSearchParams();
   /** Optional ?session=<id> from the search palette. Cleared after consumption. */
   const requestedSessionId = searchParams.get("session");
+  // Suppress the "unused" warning on `variant` for now — wired through but
+  // the playground-specific cosmetic differences live in dedicated copy
+  // inside SessionSidebar's projectId display.
+  void variant;
 
   // ─── Scaffold state ─────────────────────────────────────────────────
   const [videoType, setVideoType] = useState<VideoType>("product-launch");

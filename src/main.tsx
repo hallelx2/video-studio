@@ -2,8 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { RouterProvider, createHashRouter, Navigate } from "react-router-dom";
 import { App } from "./App.js";
+import { HomeRoute } from "./routes/Home.js";
 import { ProjectsRoute } from "./routes/Projects.js";
 import { WorkbenchRoute } from "./routes/Workbench.js";
+import { PlaygroundRoute } from "./routes/Playground.js";
 import { SettingsRoute } from "./routes/Settings.js";
 import { OnboardingRoute } from "./routes/Onboarding.js";
 import { ErrorBoundary } from "./routes/ErrorBoundary.js";
@@ -24,12 +26,17 @@ const router = createHashRouter([
     element: <App />,
     errorElement: <ErrorBoundary />,
     children: [
-      { index: true, element: <ProjectsRoute /> },
+      // Home is the landing surface — greeting + recent activity + browse.
+      { index: true, element: <HomeRoute /> },
+      // Full project picker, reachable from Home and from anywhere via the
+      // breadcrumb / sidebar.
+      { path: "projects", element: <ProjectsRoute /> },
       { path: "project/:productId", element: <WorkbenchRoute /> },
+      // Playground = a workbench that's not anchored to any source project.
+      { path: "playground", element: <PlaygroundRoute /> },
       { path: "settings", element: <SettingsRoute /> },
     ],
   },
-  // Catch-all: anything that didn't match, redirect home so we never 404.
   {
     path: "*",
     element: <Navigate to="/" replace />,

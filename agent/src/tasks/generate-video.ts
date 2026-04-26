@@ -467,6 +467,28 @@ function stageOnePrompt(args: {
   projectWorkspacePath: string;
   orgRoot: string;
 }): string {
+  // Playground mode — no source repo. Skip the README/IMPROVEMENTS/launch-post
+  // reads (there's nothing to read), still resolve the DESIGN.md from the
+  // global default, and synthesise source-brief.md from the user's brief alone.
+  if (args.projectId === "__playground__") {
+    return [
+      `STAGE 1 + 2 — Playground mode (no source project).`,
+      ``,
+      `Video type: ${args.videoType} (${args.meta.scenes} scenes, ~${args.meta.durationSec}s, structure: ${args.meta.structure})`,
+      args.brief ? `User brief: ${args.brief}` : `User brief: (none provided)`,
+      ``,
+      `Workspace folder: ${args.projectWorkspacePath}`,
+      ``,
+      `Playground means there's no organisation-projects/<id>/README.md to read — the brief above is the only context. Skip every source-read step.`,
+      ``,
+      `1. Resolve DESIGN.md: fork the repo-root DESIGN.md to ${args.projectWorkspacePath}/DESIGN.md verbatim. Don't customise — there's no brand to inherit.`,
+      `2. Write ${args.projectWorkspacePath}/source-brief.md from the user's brief. Treat the brief as the elevator pitch + voice notes + audience hint, all in one. Reformat into a clean structured doc with headings: TL;DR, Audience, Hook angle, Voice notes.`,
+      `3. If the brief is too thin to draft a script (under ~10 substantive words, or ambiguous about the topic), STOP HERE and emit a clarification prompt asking for one or two specifics — see the Persona Overrides + Communication Protocol sections of this system prompt for the prompt JSON shape. Don't fabricate content.`,
+      ``,
+      `Emit progress messages as you go. Do not draft the script in this stage — that's Stage 3.`,
+    ].join("\n");
+  }
+
   return [
     `STAGE 1 + 2 — Read source, resolve DESIGN.md.`,
     ``,
