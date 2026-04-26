@@ -29,6 +29,21 @@ const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL;
 const agent = new AgentBridge();
 let mainWindow: BrowserWindow | null = null;
 
+/**
+ * Resolve the runtime icon path. In dev, electron loads from the project
+ * tree; in prod the file is packed into the asar at build/icon.png. Both
+ * resolve via the same `..\..\build\icon.png` traversal because
+ * electron/dist/main.js is two levels below the project root either way.
+ *
+ * On macOS the .icns bundled by electron-builder takes precedence for the
+ * dock; on Windows the .exe icon is what shows in the taskbar. This setting
+ * mostly affects the in-window title bar (Linux/Windows dev) and the
+ * alt-tab thumbnail.
+ */
+function getIconPath(): string {
+  return join(__dirname, "..", "..", "build", "icon.png");
+}
+
 /** Apply config-driven flags (notifications etc) to the bridge. Called on
  *  bootstrap and after every config:save. */
 async function syncConfigToBridge(): Promise<void> {
@@ -48,6 +63,7 @@ function createWindow(): void {
     minHeight: 720,
     show: false, // wait for ready-to-show, avoids flash of white
     backgroundColor: "#0A0A0B", // ink — matches DESIGN.md so first paint isn't a white flash
+    icon: getIconPath(), // lens-and-play monogram (build/icon.svg → build/icon.png)
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     autoHideMenuBar: true,
     webPreferences: {

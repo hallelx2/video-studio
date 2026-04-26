@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Video Studio app icon — Atelier Noir lens-and-play monogram, sized for a
+  1024×1024 PNG export. The same mark used in TopChrome's BrandMark, scaled
+  up and given a dark canvas + soft cinnabar glow to read at every OS icon
+  rendering size (16×16 system tray → 1024×1024 retina dock).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Canvas: deep ink (matches the color-ink token #0A0A0B) with a
+       slightly lifted radial wash so the icon does not disappear on dark
+       wallpapers. -->
+  <defs>
+    <radialGradient id="canvas" cx="50%" cy="42%" r="60%">
+      <stop offset="0%" stop-color="#1C1C20"/>
+      <stop offset="100%" stop-color="#0A0A0B"/>
+    </radialGradient>
+    <radialGradient id="cinnabar-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF5E3A" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#FF5E3A" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#FF5E3A" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded square canvas — macOS-style superellipse approximation -->
+  <rect x="0" y="0" width="1024" height="1024" rx="224" ry="224" fill="url(#canvas)"/>
+
+  <!-- Subtle cinnabar glow behind the lens to give the icon presence -->
+  <circle cx="512" cy="512" r="380" fill="url(#cinnabar-glow)"/>
+
+  <!-- Outer lens ring -->
+  <circle cx="512" cy="512" r="352" stroke="#EDE7DC" stroke-width="22" fill="none"/>
+
+  <!-- Inner aperture suggestion -->
+  <circle cx="512" cy="512" r="232" stroke="#B8B2A4" stroke-width="10" fill="none" opacity="0.6"/>
+
+  <!-- Play triangle, cinnabar fill, anchored slightly left of center for that
+       classic 'play button' weight. -->
+  <path d="M412 364 L660 512 L412 660 Z" fill="#FF5E3A"/>
+
+  <!-- REC dot — upper-right brass-ringed -->
+  <circle cx="800" cy="224" r="48" fill="#FF5E3A"/>
+  <circle cx="800" cy="224" r="52" stroke="#FF5E3A" stroke-width="3" fill="none" opacity="0.45"/>
+</svg>
