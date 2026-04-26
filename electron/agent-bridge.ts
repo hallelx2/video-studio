@@ -25,6 +25,10 @@ export class AgentBridge {
    *  what went wrong instead of just "exited with code 1". */
   private stderrTail: string[] = [];
   private static readonly STDERR_TAIL_MAX = 12;
+  /** Set to true when the agent emits its own fatal error — used to suppress
+   *  the bare "agent exited with code 1" follow-up that otherwise duplicates
+   *  the same news in the activity stream. */
+  private agentReportedFatal = false;
   /** Toggled by config; when false, maybeNotify() short-circuits silently. */
   private notificationsEnabled = true;
 
@@ -205,6 +209,7 @@ export class AgentBridge {
     this.proc = proc;
     this.buffer = "";
     this.stderrTail = [];
+    this.agentReportedFatal = false;
 
     proc.stdout.on("data", (chunk: Buffer) => this.handleStdout(chunk));
     proc.stderr.on("data", (chunk: Buffer) => {
@@ -236,10 +241,10 @@ export class AgentBridge {
         this.parseLine(this.buffer);
         this.buffer = "";
       }
-      if (code !== 0 && signal !== "SIGTERM") {
-        // Tail the stderr buffer so the user actually sees what failed instead
-        // of a bare "exited with code 1". Skip lines we can confidently ignore
-        // (Node's fixed deprecation warnings, the SDK's own startup banner).
+      if (code !== 0 && signal !== "SIGTERM" && !this.agentReportedFatal) {
+        // Only emit the bare exit marker if the agent didn't already explain
+        // the failure with its own error event. Otherwise we'd be double-
+        // logging the same news ("API timeout" + "agent exited with code 1").
         const noisyPatterns = [
           /^\(node:\d+\) /,
           /^\(Use `node --trace-deprecation/,
@@ -259,6 +264,7 @@ export class AgentBridge {
         });
       }
       this.stderrTail = [];
+      this.agentReportedFatal = false;
       this.proc = null;
     });
   }
@@ -332,6 +338,12 @@ export class AgentBridge {
   private parseLine(line: string): void {
     try {
       const event = JSON.parse(line) as AgentEvent;
+      // If the agent emits its own non-recoverable error, remember it so we
+      // can suppress the redundant "agent exited with code N" follow-up
+      // when the process tears down a moment later.
+      if (event.type === "error" && event.recoverable === false) {
+        this.agentReportedFatal = true;
+      }
       this.emit(event);
     } catch {
       // Not JSON — surface as a raw log line.

@@ -234,9 +234,39 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
   // from one assistant message into one TextActivity.
   const textActivityByMessageId = new Map<string, number>();
 
+  // Track whether we just passed a terminal state. The next user_message
+  // after a terminal event marks the start of a new turn, and we reset
+  // per-run state so the StreamEndIndicator and metrics bar stop reflecting
+  // the previous run's outcome while the new one is in flight.
+  let postTerminal = false;
+
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
     const ts = baseTs + i;
+
+    // Reset per-run state when a new turn opens after a terminal event.
+    // Keeps cumulative session totals (usage, cost, toolCallCount) but wipes
+    // the ephemeral fields that describe "the current run".
+    if (event.type === "user_message" && postTerminal) {
+      state.status = "running";
+      state.result = null;
+      state.fatalError = null;
+      state.pendingPrompt = null;
+      state.currentStageId = null;
+      state.stages = STAGE_ORDER.map((id) => ({
+        id,
+        label: STAGE_LABELS[id],
+        status: "pending",
+        startedAt: null,
+        endedAt: null,
+        message: null,
+        progress: null,
+      }));
+      state.metrics.startedAt = ts;
+      state.metrics.endedAt = null;
+      postTerminal = false;
+    }
+
     if (state.metrics.startedAt === null) state.metrics.startedAt = ts;
 
     if (state.status === "idle") state.status = "running";
@@ -469,6 +499,7 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
           const active = state.stages.find((s) => s.status === "active");
           if (active) active.status = "error";
         }
+        postTerminal = true;
         break;
       }
 
@@ -490,6 +521,7 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
           state.pendingPrompt = null;
           const active = state.stages.find((s) => s.status === "active");
           if (active) active.status = "error";
+          postTerminal = true;
         }
         break;
       }

@@ -145,46 +145,75 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   // Make sure the workspace exists before we hand it to the agent.
   await fs.mkdir(projectWorkspacePath, { recursive: true });
 
-  // ─── Stage 1+2: Read source + resolve DESIGN.md ────────────────────────
-  emit({
-    type: "progress",
-    phase: "reading_source",
-    message: `Reading ${opts.projectId} from ${projectSourcePath}`,
-    progress: 0.05,
+  // ─── Resume detection ──────────────────────────────────────────────────
+  // If the previous run died mid-pipeline, the workspace already has some
+  // artifacts on disk. Detect what's there and skip the stages whose work
+  // is already done — the user shouldn't have to re-pay for an Opus draft
+  // because the SDK timed out three minutes later in the narration stage.
+  const scriptPath = join(projectWorkspacePath, "script.json");
+  const designPath = join(projectWorkspacePath, "DESIGN.md");
+  const briefPath = join(projectWorkspacePath, "source-brief.md");
+  const resume = await detectResume({
+    scriptPath,
+    designPath,
+    briefPath,
+    projectWorkspacePath,
+    formats: opts.formats,
   });
 
-  await runAgent({
-    prompt: stageOnePrompt({
-      projectId: opts.projectId,
-      videoType: opts.videoType,
-      brief: opts.brief,
-      meta,
-      projectSourcePath,
-      projectWorkspacePath,
-      orgRoot,
-    }),
-    systemPrompt: resolvedSystemPrompt,
-    cwd: projectWorkspacePath,
-    env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
-    model: opts.model,
-  });
+  if (resume.resumedFrom) {
+    emit({
+      type: "progress",
+      phase: "reading_source",
+      message: `Resuming from ${resume.resumedFrom} — found existing ${resume.foundArtifacts.join(", ")}`,
+      progress: 0.05,
+    });
+  }
+
+  // ─── Stage 1+2: Read source + resolve DESIGN.md ────────────────────────
+  if (!resume.skipReadSource) {
+    emit({
+      type: "progress",
+      phase: "reading_source",
+      message: `Reading ${opts.projectId} from ${projectSourcePath}`,
+      progress: 0.05,
+    });
+
+    await runAgent({
+      prompt: stageOnePrompt({
+        projectId: opts.projectId,
+        videoType: opts.videoType,
+        brief: opts.brief,
+        meta,
+        projectSourcePath,
+        projectWorkspacePath,
+        orgRoot,
+      }),
+      systemPrompt: resolvedSystemPrompt,
+      cwd: projectWorkspacePath,
+      env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+      model: opts.model,
+    });
+  }
 
   // ─── Stage 3: Script draft + HARD GATE ─────────────────────────────────
   emit({
     type: "progress",
     phase: "drafting_script",
-    message: "Drafting script",
+    message: resume.skipDraftScript
+      ? "Found existing script.json — skipping draft, going straight to approval"
+      : "Drafting script",
     progress: 0.25,
   });
-
-  const scriptPath = join(projectWorkspacePath, "script.json");
   let approved = false;
   let revision = 0;
 
   while (!approved && revision < 5) {
     // The first iteration writes the initial draft via the agent;
-    // subsequent iterations revise based on user feedback.
-    if (revision === 0) {
+    // subsequent iterations revise based on user feedback. If resume
+    // detection found an existing script.json we skip the initial draft
+    // run entirely and go straight to the approval gate.
+    if (revision === 0 && !resume.skipDraftScript) {
       await runAgent({
         prompt: stageThreePrompt({
           projectId: opts.projectId,
@@ -270,46 +299,64 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   }
 
   // ─── Stage 4: Kokoro TTS narration ─────────────────────────────────────
-  emit({
-    type: "progress",
-    phase: "narration",
-    message: "Generating narration via Kokoro (HyperFrames TTS)",
-    progress: 0.45,
-  });
+  if (resume.skipNarration) {
+    emit({
+      type: "progress",
+      phase: "narration",
+      message: "Found existing narration WAVs — skipping TTS",
+      progress: 0.45,
+    });
+  } else {
+    emit({
+      type: "progress",
+      phase: "narration",
+      message: "Generating narration via Kokoro (HyperFrames TTS)",
+      progress: 0.45,
+    });
 
-  await runAgent({
-    prompt: stageFourPrompt({
-      projectWorkspacePath,
-      ttsVoice,
-      scriptPath,
-    }),
-    systemPrompt: resolvedSystemPrompt,
-    cwd: projectWorkspacePath,
-    env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
-    model: opts.model,
-  });
+    await runAgent({
+      prompt: stageFourPrompt({
+        projectWorkspacePath,
+        ttsVoice,
+        scriptPath,
+      }),
+      systemPrompt: resolvedSystemPrompt,
+      cwd: projectWorkspacePath,
+      env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+      model: opts.model,
+    });
+  }
 
   // ─── Stage 5: HyperFrames composition (per aspect ratio) ───────────────
-  emit({
-    type: "progress",
-    phase: "composing",
-    message: "Authoring HyperFrames composition(s)",
-    progress: 0.65,
-  });
+  if (resume.skipCompose) {
+    emit({
+      type: "progress",
+      phase: "composing",
+      message: "Found existing compositions — skipping authoring",
+      progress: 0.65,
+    });
+  } else {
+    emit({
+      type: "progress",
+      phase: "composing",
+      message: "Authoring HyperFrames composition(s)",
+      progress: 0.65,
+    });
 
-  await runAgent({
-    prompt: stageFivePrompt({
-      projectId: opts.projectId,
-      videoType: opts.videoType,
-      formats: opts.formats,
-      projectWorkspacePath,
-      scriptPath,
-    }),
-    systemPrompt: resolvedSystemPrompt,
-    cwd: projectWorkspacePath,
-    env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
-    model: opts.model,
-  });
+    await runAgent({
+      prompt: stageFivePrompt({
+        projectId: opts.projectId,
+        videoType: opts.videoType,
+        formats: opts.formats,
+        projectWorkspacePath,
+        scriptPath,
+      }),
+      systemPrompt: resolvedSystemPrompt,
+      cwd: projectWorkspacePath,
+      env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+      model: opts.model,
+    });
+  }
 
   // ─── Compose-approval gate: render now, preview first, or revise ───────
   // Each composition lives at <workspace>/<aspect>/index.html. The renderer
@@ -450,6 +497,112 @@ async function readScriptPreview(
     return { scenes: parsed.scenes ?? [], raw };
   } catch {
     return null;
+  }
+}
+
+// ─── Resume detection ─────────────────────────────────────────────────────
+// Inspect the workspace and figure out which stages can be skipped because
+// their artifacts are already on disk from a previous (possibly aborted)
+// run. Conservative: a stage is only skipped when its *primary* artifact
+// is present and well-formed. Anything ambiguous re-runs.
+
+interface ResumeReport {
+  /** Free-form "stage we resumed from" string for the progress toast. */
+  resumedFrom: string | null;
+  foundArtifacts: string[];
+  skipReadSource: boolean;
+  skipDraftScript: boolean;
+  skipNarration: boolean;
+  skipCompose: boolean;
+}
+
+async function detectResume(args: {
+  scriptPath: string;
+  designPath: string;
+  briefPath: string;
+  projectWorkspacePath: string;
+  formats: string[];
+}): Promise<ResumeReport> {
+  const found: string[] = [];
+
+  const hasScript = await isReadableFile(args.scriptPath);
+  const hasDesign = await isReadableFile(args.designPath);
+  const hasBrief = await isReadableFile(args.briefPath);
+  if (hasDesign) found.push("DESIGN.md");
+  if (hasBrief) found.push("source-brief.md");
+  if (hasScript) found.push("script.json");
+
+  // Stage 1 (read source) lays down DESIGN.md + source-brief.md. If both are
+  // present we can re-use the same context without re-reading the source.
+  const skipReadSource = hasDesign && hasBrief;
+
+  // Stage 3 (draft script) writes script.json. If it parses + has scenes,
+  // skip the draft and go straight to the approval gate.
+  let skipDraftScript = false;
+  if (hasScript) {
+    const preview = await readScriptPreview(args.scriptPath);
+    skipDraftScript = !!preview && Array.isArray(preview.scenes) && preview.scenes.length > 0;
+  }
+
+  // Stage 4 (narration) writes WAVs into <workspace>/narration/. If we have
+  // a wav per scene id, we can skip TTS.
+  let skipNarration = false;
+  if (skipDraftScript) {
+    const preview = await readScriptPreview(args.scriptPath);
+    const scenes = preview?.scenes ?? [];
+    if (scenes.length > 0) {
+      const narrationDir = join(args.projectWorkspacePath, "narration");
+      const wavs = await listFiles(narrationDir);
+      const sceneIdsCovered = scenes.every((s) =>
+        wavs.some((f) => f.startsWith(s.id) && f.endsWith(".wav"))
+      );
+      skipNarration = sceneIdsCovered && wavs.length > 0;
+      if (skipNarration) found.push(`${wavs.length} narration WAVs`);
+    }
+  }
+
+  // Stage 5 (compose) writes <aspect>/index.html for each requested format.
+  const aspects = aspectsFromFormats(args.formats);
+  const compositionsExist = await Promise.all(
+    aspects.map((aspect) =>
+      isReadableFile(join(args.projectWorkspacePath, aspect, "index.html"))
+    )
+  );
+  const skipCompose = compositionsExist.length > 0 && compositionsExist.every(Boolean);
+  if (skipCompose) found.push(`${aspects.length} compositions`);
+
+  // Free-form "where we picked up" label for the toast.
+  let resumedFrom: string | null = null;
+  if (skipCompose) resumedFrom = "compose-approval";
+  else if (skipNarration) resumedFrom = "compose";
+  else if (skipDraftScript) resumedFrom = "narration";
+  else if (skipReadSource) resumedFrom = "draft-script";
+
+  return {
+    resumedFrom,
+    foundArtifacts: found,
+    skipReadSource,
+    skipDraftScript,
+    skipNarration,
+    skipCompose,
+  };
+}
+
+async function isReadableFile(path: string): Promise<boolean> {
+  try {
+    const stat = await fs.stat(path);
+    return stat.isFile() && stat.size > 0;
+  } catch {
+    return false;
+  }
+}
+
+async function listFiles(dir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    return entries.filter((e) => e.isFile()).map((e) => e.name);
+  } catch {
+    return [];
   }
 }
 
