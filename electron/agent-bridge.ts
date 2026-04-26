@@ -80,6 +80,10 @@ export class AgentBridge {
       cwd: workspacePath,
       stdio: ["ignore", "pipe", "pipe"],
       windowsHide: true,
+      // Node 22 on Windows refuses to spawn `.cmd` shims directly with a
+      // bare EINVAL — the file isn't a real PE binary. Run through the
+      // shell so cmd.exe resolves the .cmd shim correctly.
+      shell: process.platform === "win32",
       env: { ...process.env, BROWSER: "none" },
     });
 
