@@ -48,6 +48,11 @@ export function InlineApproval({
   const compositions = (prompt.payload as { compositions?: CompositionRef[] }).compositions;
   const isComposeApproval = promptKind === "compose-approval" && Array.isArray(compositions);
   const isClarification = promptKind === "clarification";
+  const isStageFailure = promptKind === "stage-failure";
+
+  if (isStageFailure) {
+    return <StageFailureCard prompt={prompt} onRespond={onRespond} />;
+  }
 
   if (isComposeApproval) {
     return <ComposeApproval prompt={prompt} compositions={compositions!} onRespond={onRespond} />;
@@ -538,6 +543,113 @@ function ClarificationCard({
         Pick an option above, or type a custom answer in the chat below — anything you send
         becomes the agent's direction for this question.
       </p>
+    </article>
+  );
+}
+
+// ─── Stage failure flavor ────────────────────────────────────────────────
+// Surfaces when withReviewAndRetry asks the user what to do after a stage
+// blew up. The agent's markdown review already rendered above this card as
+// regular agent_text — this component is just the "retry / cancel" gate.
+//
+// Alarm-bordered to mirror the failure state, with the stage name + attempt
+// counter in the header so the user knows where in the pipeline they are.
+
+function StageFailureCard({
+  prompt,
+  onRespond,
+}: {
+  prompt: PendingPrompt;
+  onRespond: (response: string) => void | Promise<void>;
+}) {
+  const stage = (prompt.payload as { stage?: string }).stage ?? "unknown stage";
+  const attempt = (prompt.payload as { attempt?: number }).attempt;
+  const maxAttempts = (prompt.payload as { maxAttempts?: number }).maxAttempts;
+  const error = (prompt.payload as { error?: string }).error ?? "";
+  const [submitting, setSubmitting] = useState(false);
+  const [chosen, setChosen] = useState<string | null>(null);
+
+  const handlePick = async (value: string) => {
+    if (submitting) return;
+    setChosen(value);
+    setSubmitting(true);
+    try {
+      await onRespond(value);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <article
+      className={cn(
+        "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
+        submitting
+          ? "border-l-paper-mute/40 bg-paper-mute/[0.05] opacity-75 pointer-events-none"
+          : "border-l-alarm bg-alarm/[0.05]"
+      )}
+      aria-busy={submitting}
+    >
+      <header className="flex items-baseline justify-between gap-4">
+        <div className="flex items-baseline gap-3">
+          <span
+            className={cn(
+              "pulse-cinnabar h-1 w-1 self-center rounded-full",
+              submitting ? "bg-paper-mute/60" : "bg-alarm"
+            )}
+          />
+          <span
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-widest",
+              submitting ? "text-paper-mute" : "text-alarm"
+            )}
+          >
+            {submitting
+              ? `${chosen ?? "responding"} · agent resuming`
+              : `${stage} · failed`}
+          </span>
+          {attempt !== undefined && maxAttempts !== undefined && (
+            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+              attempt {attempt}/{maxAttempts}
+            </span>
+          )}
+        </div>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+          recoverable
+        </span>
+      </header>
+
+      <h3 className="display-sm mt-2 max-w-3xl text-xl text-paper">{prompt.question}</h3>
+
+      {error && (
+        <pre className="hairline mt-3 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded border border-alarm/20 bg-alarm/[0.04] p-2 font-mono text-[11px] leading-relaxed text-alarm">
+          {error}
+        </pre>
+      )}
+
+      <p className="mt-3 max-w-2xl text-xs leading-relaxed text-paper-mute">
+        The agent's review is above. Fix the underlying issue (install the
+        missing package, free up disk, etc) and click <span className="text-paper">retry</span> — the cache means only the
+        unfinished work re-runs. Or <span className="text-paper">cancel</span> to pause the pipeline and start a fresh
+        message.
+      </p>
+
+      <footer className="mt-4 flex items-center justify-end gap-8">
+        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+          {submitting
+            ? "waiting for the agent to resume…"
+            : "click retry once you've fixed it"}
+        </span>
+        {prompt.options.map((opt) => (
+          <ActionButton
+            key={opt}
+            option={opt}
+            disabled={submitting}
+            inflight={submitting && chosen === opt}
+            onClick={() => handlePick(opt)}
+          />
+        ))}
+      </footer>
     </article>
   );
 }
