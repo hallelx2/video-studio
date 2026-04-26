@@ -3,16 +3,18 @@ import { cn } from "../../lib/cn.js";
 import type {
   Activity,
   AgentRunState,
+  LogActivity,
   PendingPrompt,
   TextActivity,
 } from "../../lib/agent-state.js";
 import { TextCard } from "./TextCard.js";
 import { ToolCallCard } from "./ToolCallCard.js";
-import { ProgressCard, LogCard, ErrorCard, RawCard } from "./MetaCards.js";
+import { ProgressCard, ErrorCard, RawCard } from "./MetaCards.js";
 import { UserMessageCard } from "./UserMessageCard.js";
 import { InlineApproval } from "./InlineApproval.js";
 import { ReasoningCard } from "./ReasoningCard.js";
 import { StreamEndIndicator } from "./StreamEndIndicator.js";
+import { TerminalLogGroup } from "./TerminalLogGroup.js";
 
 const REASONING_MAX_LEN = 500;
 
@@ -132,12 +134,20 @@ export function ActivityStream({
           <Empty filter={filter} />
         ) : (
           <ul className="flex min-w-0 flex-col gap-2">
-            {visible.map((activity, i) => {
+            {groupActivities(visible).map((item, i) => {
+              if (item.kind === "log-group") {
+                return (
+                  <li key={item.firstId}>
+                    <TerminalLogGroup level={item.level} lines={item.lines} />
+                  </li>
+                );
+              }
+              const activity = item.activity;
               // Turn boundary: every UserActivity (except the very first one
               // in the visible list) starts a new turn — render a hairline
               // divider above it so multi-run conversations are scannable.
               const isTurnStart = activity.kind === "user" && i > 0;
-              const asReasoning = isReasoningContext(visible, i);
+              const asReasoning = isReasoningContext(visible, visible.indexOf(activity));
               return (
                 <li key={activity.id}>
                   {isTurnStart && <TurnDivider />}
@@ -207,12 +217,46 @@ function renderActivity(activity: Activity): React.ReactNode {
     case "progress":
       return <ProgressCard activity={activity} />;
     case "log":
-      return <LogCard activity={activity} />;
+      // Singleton logs (no consecutive siblings to group) still render as a
+      // tiny TerminalLogGroup so the formatting is consistent — one mono
+      // line in a dark sliver instead of bare text in the prose stream.
+      return <TerminalLogGroup level={activity.level} lines={[activity.text]} />;
     case "error":
       return <ErrorCard activity={activity} />;
     case "raw":
       return <RawCard activity={activity} />;
   }
+}
+
+/**
+ * Collapse consecutive LogActivity items with the same level into one
+ * `log-group` item that renders as a single TerminalLogGroup. Any other
+ * activity flushes the run.
+ */
+type StreamItem =
+  | { kind: "single"; activity: Activity }
+  | { kind: "log-group"; level: string; lines: string[]; firstId: string };
+
+function groupActivities(activities: Activity[]): StreamItem[] {
+  const out: StreamItem[] = [];
+  for (const a of activities) {
+    if (a.kind === "log") {
+      const last = out[out.length - 1];
+      if (last && last.kind === "log-group" && last.level === a.level) {
+        last.lines.push(a.text);
+        continue;
+      }
+      out.push({
+        kind: "log-group",
+        level: (a as LogActivity).level,
+        lines: [a.text],
+        firstId: a.id,
+      });
+      continue;
+    }
+    out.push({ kind: "single", activity: a });
+  }
+  return out;
 }
 
 function Empty({ filter }: { filter: FilterKey }) {
