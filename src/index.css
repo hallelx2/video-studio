@@ -30,6 +30,28 @@
   --ease-atelier: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* ─── Atelier Crème — light theme overrides ────────────────────────────────
+ * Same Atelier identity, daylight canvas. Activated by setting
+ * `data-theme="creme"` on <html> (App.tsx wires this from AppConfig).
+ * Cinnabar drops slightly toward a deeper red for AAA contrast on paper;
+ * brass deepens for legibility on a light surface; ink becomes a near-black
+ * for type. Film grain switches to multiply so it darkens rather than
+ * lightens the page.
+ * ────────────────────────────────────────────────────────────────────────── */
+[data-theme="creme"] {
+  --color-ink: #F4EFE6;          /* warm paper canvas */
+  --color-ink-raised: #EDE7DC;   /* card / raised surface */
+  --color-ink-edge: #E2DBCE;     /* hover / active surface */
+  --color-paper: #15110C;        /* near-black ink type */
+  --color-paper-mute: #6B6457;   /* muted body / metadata */
+  --color-brass: #8C6F2E;        /* deeper for contrast on light */
+  --color-brass-line: rgb(140 111 46 / 0.20);
+  --color-cinnabar: #C53D17;     /* slightly darker for AAA on paper */
+  --color-cinnabar-glow: rgb(197 61 23 / 0.18);
+  --color-alarm: #B82626;
+  color-scheme: light;
+}
+
 /* ─── Reset / base ────────────────────────────────────────────────────────── */
 :root {
   color-scheme: dark;
@@ -83,6 +105,14 @@ samp {
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.91 0 0 0 0 0.86 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   background-size: 200px 200px;
+}
+
+/* On the cream canvas, overlay blends too lightly — switch to multiply so
+ * the noise reads as a faint darkening across the warm paper instead of
+ * a wash that disappears. */
+[data-theme="creme"] .grain::before {
+  mix-blend-mode: multiply;
+  opacity: 0.05;
 }
 
 /* ─── Cinnabar pulse — the agent's heartbeat ───────────────────────────── */

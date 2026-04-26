@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate } from "react-router-dom";
-import { getConfig } from "./lib/agent-client.js";
+import { getConfig, saveConfig } from "./lib/agent-client.js";
 import { TopChrome } from "./components/ui/TopChrome.js";
 import { Pulse } from "./components/ui/Pulse.js";
 import { SearchPalette } from "./components/agent/SearchPalette.js";
+import { DEFAULT_CONFIG, type AppConfig, type ThemeId } from "./lib/types.js";
 
 /**
  * Atelier Noir shell.
@@ -17,13 +18,16 @@ export function App() {
   const navigate = useNavigate();
   const [checked, setChecked] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [theme, setThemeState] = useState<ThemeId>(DEFAULT_CONFIG.theme);
 
-  // Bootstrap onboarding redirect.
+  // Bootstrap onboarding redirect + hydrate theme.
   useEffect(() => {
     let cancelled = false;
     getConfig()
       .then((cfg) => {
         if (cancelled) return;
+        const t: ThemeId = cfg.theme ?? DEFAULT_CONFIG.theme;
+        setThemeState(t);
         if (!cfg.onboardingComplete || !cfg.orgProjectsPath) {
           navigate("/onboarding", { replace: true });
         }
@@ -38,6 +42,27 @@ export function App() {
       cancelled = true;
     };
   }, [navigate]);
+
+  // Reflect the theme on <html> so the [data-theme="creme"] CSS rules in
+  // index.css apply globally — including overlays, the search palette,
+  // and any portaled content. data-theme="noir" is the default and a noop.
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    return () => {
+      document.documentElement.removeAttribute("data-theme");
+    };
+  }, [theme]);
+
+  const setTheme = async (next: ThemeId) => {
+    setThemeState(next);
+    try {
+      const cfg = (await getConfig().catch(() => null)) ?? DEFAULT_CONFIG;
+      const merged: AppConfig = { ...cfg, theme: next };
+      await saveConfig(merged);
+    } catch {
+      // best-effort persistence; the in-memory state still flips
+    }
+  };
 
   // Global Cmd+K / Ctrl+K to open the search palette. Suppressed when
   // typing in editable elements (the slash menu owns input focus there).
@@ -75,7 +100,7 @@ export function App() {
 
   return (
     <div className="grain flex h-screen w-screen flex-col bg-ink text-paper">
-      <TopChrome />
+      <TopChrome theme={theme} onThemeChange={setTheme} />
       <div className="flex-1 overflow-hidden">
         <Outlet />
       </div>

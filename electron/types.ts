@@ -78,6 +78,8 @@ export interface ProjectInfo {
   description: string | null;
 }
 
+export type ThemeId = "noir" | "creme";
+
 export interface AppConfig {
   orgProjectsPath: string | null;
   workspacePath: string | null;
@@ -88,6 +90,8 @@ export interface AppConfig {
   selectedModel: string;
   /** Persona id whose voicePrompt is appended to the agent system prompt. */
   selectedPersona: string;
+  /** Atelier theme — 'noir' (dark) or 'creme' (light). Default 'noir'. */
+  theme: ThemeId;
   onboardingComplete: boolean;
 }
 
@@ -99,6 +103,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   defaultVideoType: "product-launch",
   selectedModel: "claude-opus-4-7",
   selectedPersona: "founder",
+  theme: "noir",
   onboardingComplete: false,
 };
 

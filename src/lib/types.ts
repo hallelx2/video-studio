@@ -26,6 +26,7 @@ export type {
   SessionMeta,
   SessionScaffold,
   StudioBridge,
+  ThemeId,
   VideoFormat,
   VideoType,
   VideoTypeOption,
