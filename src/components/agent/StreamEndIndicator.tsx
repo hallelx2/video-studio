@@ -4,6 +4,7 @@ import {
   type AgentRunState,
 } from "../../lib/agent-state.js";
 import { openPath, revealInFolder } from "../../lib/agent-client.js";
+import { usePreview } from "../../lib/preview-context.js";
 
 /**
  * Punctuation marker at the bottom of the activity stream when the run has
@@ -85,39 +86,7 @@ function SuccessMarker({ state }: { state: AgentRunState }) {
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-paper">{state.result.message}</p>
       )}
 
-      {outputs.length > 0 && (
-        <ul className="mt-3 grid grid-cols-1 gap-px overflow-hidden rounded border border-paper-mute/15 bg-paper-mute/15">
-          {outputs.map((o) => (
-            <li
-              key={o.format + o.path}
-              className="flex items-center justify-between gap-3 bg-ink px-3 py-2"
-            >
-              <span className="flex min-w-0 items-baseline gap-3">
-                <span className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-                  {o.format}
-                </span>
-                <span className="min-w-0 truncate font-mono text-[10px] text-paper-mute">
-                  {o.path}
-                </span>
-              </span>
-              <span className="flex shrink-0 items-baseline gap-4">
-                <button
-                  onClick={() => openPath(o.path).catch(() => undefined)}
-                  className="border-b border-cinnabar pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cinnabar hover:text-paper"
-                >
-                  play →
-                </button>
-                <button
-                  onClick={() => revealInFolder(o.path).catch(() => undefined)}
-                  className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
-                >
-                  reveal
-                </button>
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      {outputs.length > 0 && <OutputsList outputs={outputs} />}
 
       {warnings.length > 0 && (
         <details className="mt-3">
@@ -233,4 +202,65 @@ function Frame({
 
 function Stat({ children }: { children: React.ReactNode }) {
   return <span className="tabular text-paper">{children}</span>;
+}
+
+/**
+ * Per-format outputs list. Each row gets:
+ *   - "play →"  : open the MP4 in the inline slide-in PreviewPanel via
+ *                 the studio-media:// protocol — never leaves the app.
+ *   - "in player" : pop out to the OS's default video player.
+ *   - "reveal"  : show the file in Finder / Explorer / Files.
+ *
+ * The user picks which surface they want; the inline player is the
+ * default because they shouldn't have to leave Atelier Noir to watch
+ * what they just rendered.
+ */
+function OutputsList({
+  outputs,
+}: {
+  outputs: Array<{ format: string; path: string }>;
+}) {
+  const { openVideo } = usePreview();
+  return (
+    <ul className="mt-3 grid grid-cols-1 gap-px overflow-hidden rounded border border-paper-mute/15 bg-paper-mute/15">
+      {outputs.map((o) => (
+        <li
+          key={o.format + o.path}
+          className="flex items-center justify-between gap-3 bg-ink px-3 py-2"
+        >
+          <span className="flex min-w-0 items-baseline gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
+              {o.format}
+            </span>
+            <span className="min-w-0 truncate font-mono text-[10px] text-paper-mute">
+              {o.path}
+            </span>
+          </span>
+          <span className="flex shrink-0 items-baseline gap-4">
+            <button
+              onClick={() => openVideo({ filePath: o.path, format: o.format })}
+              className="border-b border-cinnabar pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cinnabar hover:text-paper"
+              title="Play inline in the preview panel"
+            >
+              play →
+            </button>
+            <button
+              onClick={() => openPath(o.path).catch(() => undefined)}
+              className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
+              title="Open in your default video player"
+            >
+              in player ↗
+            </button>
+            <button
+              onClick={() => revealInFolder(o.path).catch(() => undefined)}
+              className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
+              title="Show in Finder / Explorer"
+            >
+              reveal
+            </button>
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
 }

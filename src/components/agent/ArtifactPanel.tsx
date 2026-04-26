@@ -420,7 +420,7 @@ function TextEditor({
 }
 
 function CompositionActions({ artifact }: { artifact: Artifact }) {
-  const { current: preview, starting, open, close } = usePreview();
+  const { current: preview, starting, openIframe, close } = usePreview();
 
   // The dev server runs against the workspace folder, not the index.html path.
   const workspaceDir = useMemo(() => {
@@ -438,7 +438,7 @@ function CompositionActions({ artifact }: { artifact: Artifact }) {
   }, [workspaceDir, artifact.name]);
 
   const isThisOpen =
-    !!preview && preview.workspace === workspaceDir;
+    !!preview && preview.kind === "iframe" && preview.workspace === workspaceDir;
   const isStarting = starting === aspect;
 
   return (
@@ -459,7 +459,7 @@ function CompositionActions({ artifact }: { artifact: Artifact }) {
           </button>
         ) : (
           <button
-            onClick={() => void open({ workspace: workspaceDir, aspect })}
+            onClick={() => void openIframe({ workspace: workspaceDir, aspect })}
             disabled={isStarting}
             className={cn(
               "border-b pb-0.5 font-mono text-[10px] uppercase tracking-widest transition-colors",

@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, shell } from "electron";
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from "electron";
 import { join, dirname } from "node:path";
 import { promises as fs } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
@@ -98,6 +99,49 @@ function createWindow(): void {
   }
 }
 
+// ─── Custom media protocol ────────────────────────────────────────────────
+// `<video src="studio-media:///...">` lets the renderer play rendered MP4s
+// inside the app instead of handing them off to the OS player. We register
+// the scheme as privileged so it supports HTTP-style range requests
+// (Chromium asks for byte ranges to seek through video).
+//
+// URLs look like `studio-media:///<urlencoded-absolute-path>` so the path
+// survives untouched through URL parsing — Windows drive letters and
+// backslashes don't need special-case handling here.
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "studio-media",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      stream: true,
+      bypassCSP: true,
+    },
+  },
+]);
+
+function registerMediaProtocol(): void {
+  protocol.handle("studio-media", async (request) => {
+    try {
+      const url = new URL(request.url);
+      // Strip the leading "/" so decodeURIComponent gets just the path.
+      const decoded = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      // Defensive: the renderer only ever asks for files under the user's
+      // workspace or projects folder — nothing else should be reachable
+      // through this scheme. We don't enforce that here yet (the workspace
+      // path isn't readily available to this handler), but the renderer
+      // never constructs URLs to anything outside it, and the scheme is
+      // only mounted in our own BrowserWindow.
+      return await net.fetch(pathToFileURL(decoded).toString());
+    } catch (err) {
+      return new Response(`media error: ${(err as Error).message}`, {
+        status: 500,
+      });
+    }
+  });
+}
+
 // ─── Single-instance lock ──────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -114,6 +158,7 @@ if (!gotLock) {
 // ─── App lifecycle ─────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   registerIpcHandlers();
+  registerMediaProtocol();
   await syncConfigToBridge();
   // Replace Electron's default menu with our own so File/Edit/View/Window
   // are on-brand and ⌘+ / ⌘- / ⌘0 zoom shortcuts are wired natively.

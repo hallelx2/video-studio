@@ -529,13 +529,13 @@ function ComposeApproval({
   // Preview is now driven by the app-level PreviewProvider so the iframe
   // appears in the slide-in PreviewPanel instead of launching the user's
   // external browser.
-  const { current: preview, starting, open, close } = usePreview();
+  const { current: preview, starting, openIframe, close } = usePreview();
   const [submitting, setSubmitting] = useState(false);
 
   const handlePreview = useCallback(
     async (comp: CompositionRef) => {
       if (starting) return;
-      await open({ workspace: comp.path, aspect: comp.aspect });
+      await openIframe({ workspace: comp.path, aspect: comp.aspect });
     },
     [open, starting]
   );
@@ -556,8 +556,13 @@ function ComposeApproval({
     [close, onRespond, submitting]
   );
 
-  // Convenience aliases so the JSX below reads cleanly.
-  const previewing = preview ? { aspect: preview.aspect, url: preview.url } : null;
+  // Convenience aliases so the JSX below reads cleanly. Only the iframe
+  // variant counts here — a video player taking over the panel doesn't
+  // mean a composition is "running" for compose-approval purposes.
+  const previewing =
+    preview && preview.kind === "iframe"
+      ? { aspect: preview.aspect, url: preview.url }
+      : null;
 
   return (
     <article className="hairline relative border-l-2 border-l-cinnabar bg-cinnabar/[0.03] py-4 pl-5 pr-4 enter-rise">

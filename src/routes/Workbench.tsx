@@ -495,7 +495,7 @@ export function WorkbenchRoute({
         // Aspect is the last path segment (e.g. "1080x1080"). Falls back to
         // a generic label if the path doesn't contain one.
         const aspect = workspaceDir.split(/[\\/]/).pop() || "preview";
-        void preview.open({ workspace: workspaceDir, aspect }).catch(() => undefined);
+        void preview.openIframe({ workspace: workspaceDir, aspect }).catch(() => undefined);
       },
       onSwitchModel: (hint: string) => {
         // Match by family alias first ("opus" → first opus model), then by id substring.
