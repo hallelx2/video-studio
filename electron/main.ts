@@ -86,7 +86,12 @@ function createWindow(): void {
 
   if (isDev && VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(VITE_DEV_SERVER_URL);
-    mainWindow.webContents.openDevTools({ mode: "detach" });
+    // DevTools no longer auto-open in dev — too noisy when you just want to
+    // see the app. Toggle manually via the View menu (Ctrl+Shift+I / F12),
+    // or set OPEN_DEVTOOLS=1 in the env if you want them back on launch.
+    if (process.env.OPEN_DEVTOOLS === "1") {
+      mainWindow.webContents.openDevTools({ mode: "detach" });
+    }
   } else {
     // electron/dist/main.js → ../.. → project root → dist/renderer/index.html
     mainWindow.loadFile(join(__dirname, "..", "..", "dist", "renderer", "index.html"));
