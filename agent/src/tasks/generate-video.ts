@@ -787,6 +787,46 @@ function stageReviewPrompt(args: {
   maxAttempts: number;
   errorMessage: string;
 }): string {
+  // Detect failure shapes that benefit from a targeted diagnostic playbook.
+  // Today only one — Python module-not-found — but the structure makes it
+  // easy to add more (Node module, ffmpeg-not-on-path, claude-cli-not-found).
+  const isPythonModuleError =
+    /package is not installed|ModuleNotFoundError|No module named|kokoro[-_]onnx/i.test(
+      args.errorMessage
+    );
+
+  const pythonPlaybook = isPythonModuleError
+    ? [
+        ``,
+        `--- PYTHON MODULE-NOT-FOUND PLAYBOOK ---`,
+        ``,
+        `This is the canonical Windows trap: the user has the package installed in one`,
+        `Python interpreter, but the runtime is invoking a different one. Run THESE`,
+        `diagnostics in this exact order before writing the review:`,
+        ``,
+        `1. \`where.exe python\`  (Linux/macOS: \`which -a python\`) — list every python on PATH.`,
+        `2. \`where.exe python3\` and \`where.exe py\` — list alternative launchers.`,
+        `3. \`python -c "import sys; print(sys.executable, sys.version)"\` — pin which python the bare \`python\` invocation lands on.`,
+        `4. \`python -m pip show <missing-module>\` — does that python see the module?`,
+        `5. If step 4 says "not found", try the OTHER pythons from steps 1-2 with their full paths: \`<full-path-to-other-python> -m pip show <missing-module>\`.`,
+        ``,
+        `Identify the mismatch in your review. If found, structure the "What to do" section like this:`,
+        ``,
+        `> The runtime is invoking \`<path-A>\` (Python <version-A>).`,
+        `> The module is installed in \`<path-B>\`'s site-packages (Python <version-B>).`,
+        `>`,
+        `> Pick one fix:`,
+        `> 1. **Best (persistent)**: Settings → Advanced → Python interpreter → pick \`<path-B>\`. Video Studio will pin it across runs.`,
+        `> 2. **One-off**: install into the runtime's Python via \`<path-A> -m pip install <module>\`.`,
+        `> 3. **Shell-level**: reorder PATH so \`<path-B>\`'s directory wins, then relaunch \`pnpm dev\` from that shell.`,
+        ``,
+        `Hard rules specific to this playbook:`,
+        `- Watch for the Microsoft Store python3 stub at \`%LOCALAPPDATA%\\Microsoft\\WindowsApps\\python3.exe\` — it routes to the Store and has zero packages. Call it out by name if you find it.`,
+        `- Don't run \`pip install\` yourself. Tell the user the exact command, let them run it.`,
+        ``,
+      ].join("\n")
+    : "";
+
   return [
     `STAGE FAILED: ${args.stageName}`,
     `attempt ${args.attempt}/${args.maxAttempts}`,
@@ -795,19 +835,19 @@ function stageReviewPrompt(args: {
     "```",
     args.errorMessage,
     "```",
-    ``,
-    `Your job: write a short, useful review of this failure for the user. Format as markdown, under 150 words.`,
+    pythonPlaybook,
+    `Your job: write a short, useful review of this failure for the user. Format as markdown, under 200 words.`,
     ``,
     `Structure:`,
     `- **What happened** — one sentence, plain English (don't restate the error verbatim).`,
-    `- **Why** — root cause if you can identify one. Use Bash sparingly to check the environment (which X, X --version, pip list | grep, etc) only if it'd actually help diagnose.`,
-    `- **What to do** — 1-3 concrete steps the user can run to fix it. If a single command fixes it, give that command. If it's an external system issue, say so.`,
+    `- **Why** — root cause if you can identify one. Use Bash to check the environment (which X, X --version, pip show, etc) when it'd help diagnose. The playbook above (if present) tells you exactly which checks to run.`,
+    `- **What to do** — 1-3 concrete steps the user can run to fix it. Give exact commands or exact Settings paths.`,
     ``,
     `Hard rules:`,
     `- Don't try to fix it yourself — no installing packages, no editing files, no re-running the failed step. The user wants a review, not a rescue.`,
     `- Don't apologise.`,
     `- Don't ask the user a question — the runner handles the next step (retry / cancel) on its own.`,
-    `- Keep Bash usage minimal. One or two checks at most.`,
+    `- Bash usage: minimal but DO run the playbook diagnostics if one applies. The user is staring at an error; specifics beat speculation.`,
     ``,
     `When the review is written, stop. The runner will pause the pipeline and let the user decide.`,
   ].join("\n");
