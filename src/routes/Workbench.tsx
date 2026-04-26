@@ -642,7 +642,7 @@ export function WorkbenchRoute() {
             />
           </section>
 
-          <ArtifactPanel artifacts={agent.artifacts} />
+          <ArtifactPanel artifacts={agent.artifacts} projectId={productId} />
         </div>
       ) : (
         // ─── Empty state (no events yet) ─────────────────────────────────

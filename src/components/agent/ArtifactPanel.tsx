@@ -11,6 +11,7 @@ import {
   openPath,
   readText,
   revealInFolder,
+  setProjectDesignDefault,
   startPreview,
   stopPreview,
   writeText,
@@ -38,7 +39,14 @@ import {
  *   │  - composition: preview button     │
  *   └────────────────────────────────────┘
  */
-export function ArtifactPanel({ artifacts }: { artifacts: Artifact[] }) {
+export function ArtifactPanel({
+  artifacts,
+  projectId,
+}: {
+  artifacts: Artifact[];
+  /** Used by the 'save as project default' action on DESIGN.md artifacts. */
+  projectId?: string;
+}) {
   const [activePath, setActivePath] = useState<string | null>(null);
 
   // Auto-select the most recently touched core artifact when the list grows.
@@ -102,7 +110,7 @@ export function ArtifactPanel({ artifacts }: { artifacts: Artifact[] }) {
         {/* Viewer for the active artifact */}
         {active && (
           <div className="hairline border-t bg-ink-raised">
-            <ArtifactViewer artifact={active} />
+            <ArtifactViewer artifact={active} projectId={projectId} />
           </div>
         )}
       </div>
@@ -153,7 +161,13 @@ function ArtifactRow({
 
 // ─── Artifact viewer ──────────────────────────────────────────────────────
 
-function ArtifactViewer({ artifact }: { artifact: Artifact }) {
+function ArtifactViewer({
+  artifact,
+  projectId,
+}: {
+  artifact: Artifact;
+  projectId?: string;
+}) {
   const isBinary = isBinaryArtifact(artifact);
 
   return (
@@ -190,18 +204,35 @@ function ArtifactViewer({ artifact }: { artifact: Artifact }) {
       ) : isBinary ? (
         <p className="font-mono text-[11px] text-paper-mute">Binary file — open in OS to view.</p>
       ) : (
-        <TextEditor artifact={artifact} />
+        <TextEditor artifact={artifact} projectId={projectId} />
       )}
     </div>
   );
 }
 
-function TextEditor({ artifact }: { artifact: Artifact }) {
+function TextEditor({
+  artifact,
+  projectId,
+}: {
+  artifact: Artifact;
+  projectId?: string;
+}) {
   const [content, setContent] = useState<string | null>(artifact.inlineContent);
   const [draft, setDraft] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [promotingDefault, setPromotingDefault] = useState(false);
+  const [promotedAt, setPromotedAt] = useState<{ path: string } | null>(null);
+
+  /**
+   * Save this DESIGN.md as the project's default by writing it to the source
+   * project folder (organisation-projects/<projectId>/DESIGN.md). Future
+   * sessions for this project pick up this file as the design baseline
+   * instead of forking the global Atelier Noir defaults.
+   */
+  const isDesignArtifact = artifact.kind === "design";
+  const canPromoteToProject = isDesignArtifact && !!projectId;
 
   // Reset state when the active artifact changes.
   useEffect(() => {
@@ -271,6 +302,34 @@ function TextEditor({ artifact }: { artifact: Artifact }) {
     }
   }, [artifact.path, draft, isJson]);
 
+  /** Promote the current content (draft if editing, otherwise on-disk) to
+   *  the source project as <orgRoot>/<projectId>/DESIGN.md. */
+  const handlePromoteToProjectDefault = useCallback(async () => {
+    if (!projectId) return;
+    const payload = draft ?? formatted ?? "";
+    if (!payload.trim()) {
+      alert("Nothing to save — the file is empty.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Save this DESIGN.md as the default for "${projectId}"? It will be written to your project's source folder and used for every future session.`
+      )
+    ) {
+      return;
+    }
+    setPromotingDefault(true);
+    try {
+      const { path } = await setProjectDesignDefault(projectId, payload);
+      setPromotedAt({ path });
+      setTimeout(() => setPromotedAt(null), 4000);
+    } catch (err) {
+      alert(`Failed to save as project default: ${(err as Error).message}`);
+    } finally {
+      setPromotingDefault(false);
+    }
+  }, [projectId, draft, formatted]);
+
   if (loading) {
     return (
       <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">loading…</p>
@@ -279,7 +338,28 @@ function TextEditor({ artifact }: { artifact: Artifact }) {
 
   return (
     <>
-      <div className="mb-2 flex items-baseline justify-end gap-4">
+      <div className="mb-2 flex flex-wrap items-baseline justify-end gap-x-4 gap-y-1">
+        {/* Promote to project default — DESIGN.md only, requires projectId */}
+        {canPromoteToProject && (
+          <button
+            onClick={handlePromoteToProjectDefault}
+            disabled={promotingDefault}
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-widest transition-colors",
+              promotingDefault
+                ? "cursor-not-allowed text-paper-mute/40"
+                : "text-brass hover:text-paper"
+            )}
+            title="Write this DESIGN.md to the source project folder so all future sessions inherit it"
+          >
+            {promotingDefault
+              ? "saving…"
+              : promotedAt
+                ? "set ✓"
+                : "save as project default"}
+          </button>
+        )}
+
         {!editing && (
           <button
             onClick={() => setDraft(formatted ?? "")}
@@ -316,6 +396,14 @@ function TextEditor({ artifact }: { artifact: Artifact }) {
           </span>
         )}
       </div>
+
+      {/* Confirmation strip when promotion succeeded — shows the resolved path
+          so the user knows exactly where it landed in their project source. */}
+      {promotedAt && (
+        <p className="mb-2 truncate font-mono text-[10px] text-brass">
+          → {promotedAt.path}
+        </p>
+      )}
 
       {editing ? (
         <textarea

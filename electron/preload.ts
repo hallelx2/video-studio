@@ -24,6 +24,10 @@ const bridge: StudioBridge = {
   },
   projects: {
     list: () => ipcRenderer.invoke("projects:list") as Promise<ProjectInfo[]>,
+    setDesignDefault: (projectId, content) =>
+      ipcRenderer.invoke("projects:set-design-default", projectId, content) as Promise<{
+        path: string;
+      }>,
   },
   agent: {
     generate: (req: GenerateRequest) => ipcRenderer.invoke("agent:generate", req) as Promise<void>,

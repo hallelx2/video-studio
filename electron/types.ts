@@ -322,6 +322,11 @@ export interface StudioBridge {
   };
   projects: {
     list(): Promise<ProjectInfo[]>;
+    /** Write a project's source-of-truth DESIGN.md (lives next to the
+     *  project's README in the user's organisation-projects folder).
+     *  Returns the absolute path that was written. Future sessions for
+     *  this project will pick this file up as the design baseline. */
+    setDesignDefault(projectId: string, content: string): Promise<{ path: string }>;
   };
   agent: {
     generate(req: GenerateRequest): Promise<void>;

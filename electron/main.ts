@@ -109,6 +109,30 @@ function registerIpcHandlers(): void {
     return listProjects(config.orgProjectsPath);
   });
 
+  ipcMain.handle(
+    "projects:set-design-default",
+    async (_, projectId: string, content: string) => {
+      const config = await loadConfig();
+      if (!config.orgProjectsPath) {
+        throw new Error("Projects folder not configured — set it in Settings first.");
+      }
+      // Defensive: refuse path-traversal attempts. projectId should be a
+      // bare folder name, no slashes, no .. — listProjects produces these.
+      if (
+        !projectId ||
+        projectId.includes("/") ||
+        projectId.includes("\\") ||
+        projectId.includes("..")
+      ) {
+        throw new Error(`Invalid projectId: ${projectId}`);
+      }
+      const target = join(config.orgProjectsPath, projectId, "DESIGN.md");
+      await fs.mkdir(dirname(target), { recursive: true });
+      await fs.writeFile(target, content, "utf8");
+      return { path: target };
+    }
+  );
+
   ipcMain.handle("agent:generate", async (_, req: GenerateRequest) => {
     const config = await loadConfig();
     await agent.generate(req, config);

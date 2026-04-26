@@ -26,6 +26,13 @@ export async function listProjects(): Promise<ProjectInfo[]> {
   return studio().projects.list();
 }
 
+export async function setProjectDesignDefault(
+  projectId: string,
+  content: string
+): Promise<{ path: string }> {
+  return studio().projects.setDesignDefault(projectId, content);
+}
+
 export async function generateVideo(req: GenerateRequest): Promise<void> {
   return studio().agent.generate(req);
 }
