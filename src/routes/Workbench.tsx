@@ -71,6 +71,7 @@ export function WorkbenchRoute() {
   const [videoType, setVideoType] = useState<VideoType>("product-launch");
   const [formats, setFormats] = useState<VideoFormat[]>(["linkedin", "x"]);
   const [modelId, setModelId] = useState<string>(DEFAULT_CONFIG.selectedModel);
+  const [personaId, setPersonaId] = useState<string>(DEFAULT_CONFIG.selectedPersona);
   const configRef = useRef<AppConfig | null>(null);
 
   // ─── Session state ──────────────────────────────────────────────────
@@ -97,6 +98,8 @@ export function WorkbenchRoute() {
     const bootstrap = async () => {
       const cfg = await getConfig().catch(() => DEFAULT_CONFIG);
       configRef.current = cfg;
+      setModelId(cfg.selectedModel ?? DEFAULT_CONFIG.selectedModel);
+      setPersonaId(cfg.selectedPersona ?? DEFAULT_CONFIG.selectedPersona);
 
       // List existing sessions. If none exist, leave currentSessionId null —
       // the empty state with pills will show. The user creates a session by
@@ -216,6 +219,13 @@ export function WorkbenchRoute() {
     saveConfig(next).catch(() => undefined);
   }, []);
 
+  const handlePersonaChange = useCallback((id: string) => {
+    setPersonaId(id);
+    const next = { ...(configRef.current ?? DEFAULT_CONFIG), selectedPersona: id };
+    configRef.current = next;
+    saveConfig(next).catch(() => undefined);
+  }, []);
+
   // ─── Session actions ────────────────────────────────────────────────
   const handleSelectSession = useCallback(
     async (id: string) => {
@@ -297,7 +307,12 @@ export function WorkbenchRoute() {
   const startRun = useCallback(
     async (
       brief: string,
-      overrides?: { videoType?: VideoType; formats?: VideoFormat[]; modelId?: string }
+      overrides?: {
+        videoType?: VideoType;
+        formats?: VideoFormat[];
+        modelId?: string;
+        personaId?: string;
+      }
     ) => {
       if (!productId) return;
       briefRef.current = brief;
@@ -309,6 +324,7 @@ export function WorkbenchRoute() {
           formats: overrides?.formats ?? formats,
           brief: brief.trim() || undefined,
           model: overrides?.modelId ?? modelId,
+          persona: overrides?.personaId ?? personaId,
         });
       } catch (err) {
         setEvents((prev) => [
@@ -318,7 +334,7 @@ export function WorkbenchRoute() {
         setRunning(false);
       }
     },
-    [productId, videoType, formats, modelId]
+    [productId, videoType, formats, modelId, personaId]
   );
 
   const handlePromptResponse = useCallback(
@@ -615,8 +631,10 @@ export function WorkbenchRoute() {
               hasPendingPrompt={!!agent.pendingPrompt}
               hasHistory={hasHistory}
               modelId={modelId}
+              personaId={personaId}
               artifacts={agent.artifacts}
               onModelChange={handleModelChange}
+              onPersonaChange={handlePersonaChange}
               onSubmit={handleComposerSubmit}
               onStop={handleStop}
               projectName={productId ?? "this project"}
@@ -642,8 +660,10 @@ export function WorkbenchRoute() {
             hasPendingPrompt={!!agent.pendingPrompt}
             hasHistory={false}
             modelId={modelId}
+            personaId={personaId}
             artifacts={agent.artifacts}
             onModelChange={handleModelChange}
+            onPersonaChange={handlePersonaChange}
             onSubmit={handleComposerSubmit}
             onStop={handleStop}
             projectName={productId ?? "this project"}

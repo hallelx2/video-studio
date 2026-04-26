@@ -10,6 +10,8 @@ export interface GenerateVideoOptions {
   brief: string;
   /** Optional model override for this run. Threaded into runAgent → SDK. */
   model?: string;
+  /** Persona id whose voicePrompt block is appended to the system prompt. */
+  persona?: string;
   systemPrompt: string;
   /** Emit a prompt event and await the user's response. */
   askUser: (
@@ -17,6 +19,53 @@ export interface GenerateVideoOptions {
     options: string[],
     payload?: Record<string, unknown>
   ) => Promise<string>;
+}
+
+/**
+ * Bundled persona definitions (mirror of electron/types.ts PERSONAS).
+ * Duplicated here so the agent runtime doesn't depend on electron-side code.
+ * Keep the `id` and `voicePrompt` fields in sync with the renderer-side list.
+ */
+const PERSONA_VOICE_PROMPTS: Record<string, string> = {
+  founder: "",
+  conversational: [
+    "PERSONA OVERRIDE — Conversational / podcast-style dialogue.",
+    "",
+    "Write this video as a two-speaker conversation. Both speakers appear in every scene's narration field, prefixed with `[A]:` and `[B]:` markers (one turn per line, blank line between speakers).",
+    "",
+    "- Speaker A is the host: curious, asks the question that opens the scene.",
+    "- Speaker B is the expert: answers with specifics, examples, the actual claim.",
+    "- Keep individual turns to 1–2 sentences. 4–8 turns per scene total.",
+    "- Maintain the founder voice rules (no marketing-speak, no forbidden words, specifics over generalities).",
+    "- Stage 4 (TTS): generate per-speaker WAV clips. Use voice `af_bella` for A and `am_michael` for B. Each scene's manifest entry should list both clips with their speaker tag and a sequencing offset so they play in order.",
+    "- Stage 5 (composition): show a small speaker label that swaps in/out as the active speaker changes — same Atelier Noir typographic palette, brass for A's label, cinnabar for B's label.",
+    "- The script.json scenes array gains an optional `speakers: [{ speaker: 'A' | 'B', text: string, durationSec: number }]` field that the composition reads. Keep the legacy `narration` field too as a flat-text rollup for backward compatibility with single-voice tools.",
+  ].join("\n"),
+  technical: [
+    "PERSONA OVERRIDE — Technical / engineer-to-engineer.",
+    "",
+    "- Use precise terminology and tool/protocol names.",
+    "- Cite real benchmarks: latency p50/p99, throughput, memory, cost figures.",
+    "- Code spans (`vector_search`, `768-d embedding`) where they sharpen the claim.",
+    "- Skip explanatory hand-waving — the audience is fluent.",
+    "- The hook can be a contrarian engineering claim (\"O(n²) is the original sin of vector retrieval\").",
+  ].join("\n"),
+  editorial: [
+    "PERSONA OVERRIDE — Editorial / long-form magazine.",
+    "",
+    "- Each scene narration runs 3–4 sentences instead of 1–2.",
+    "- Use layered sentence structures — independent clauses, vivid imagery, occasional dependent clauses for rhythm.",
+    "- Hook can be slower and more anticipatory; trust the viewer to wait.",
+    "- Add one sentence of context before the substantive claim in each scene.",
+    "- Total duration target: closer to the upper bound of the video type's duration range.",
+  ].join("\n"),
+};
+
+function applyPersona(systemPrompt: string, personaId: string | undefined): string {
+  if (!personaId) return systemPrompt;
+  const override = PERSONA_VOICE_PROMPTS[personaId];
+  if (!override || override.length === 0) return systemPrompt;
+  return `${systemPrompt}\n\n---\n\n${override}\n`;
 }
 
 interface VideoTypeMeta {
@@ -88,6 +137,11 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   const meta = VIDEO_TYPE_META[opts.videoType] ?? VIDEO_TYPE_META["product-launch"];
   const ttsVoice = process.env.TTS_VOICE ?? "af_nova";
 
+  // Resolve once at the top — every runAgent call inside this task uses the
+  // persona-augmented prompt so the voice override applies uniformly across
+  // all six stages.
+  const resolvedSystemPrompt = applyPersona(opts.systemPrompt, opts.persona);
+
   // Make sure the workspace exists before we hand it to the agent.
   await fs.mkdir(projectWorkspacePath, { recursive: true });
 
@@ -109,7 +163,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       projectWorkspacePath,
       orgRoot,
     }),
-    systemPrompt: opts.systemPrompt,
+    systemPrompt: resolvedSystemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
     model: opts.model,
@@ -139,7 +193,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
           meta,
           projectWorkspacePath,
         }),
-        systemPrompt: opts.systemPrompt,
+        systemPrompt: resolvedSystemPrompt,
         cwd: projectWorkspacePath,
         env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
       });
@@ -200,7 +254,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
         notes: trimmed,
         revision,
       }),
-      systemPrompt: opts.systemPrompt,
+      systemPrompt: resolvedSystemPrompt,
       cwd: projectWorkspacePath,
       env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
     });
@@ -229,7 +283,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       ttsVoice,
       scriptPath,
     }),
-    systemPrompt: opts.systemPrompt,
+    systemPrompt: resolvedSystemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
     model: opts.model,
@@ -251,7 +305,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       projectWorkspacePath,
       scriptPath,
     }),
-    systemPrompt: opts.systemPrompt,
+    systemPrompt: resolvedSystemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
     model: opts.model,
@@ -323,7 +377,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
         notes: composeTrimmed,
         revision: composeRevision,
       }),
-      systemPrompt: opts.systemPrompt,
+      systemPrompt: resolvedSystemPrompt,
       cwd: projectWorkspacePath,
       env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
     });
@@ -351,7 +405,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       formats: opts.formats,
       projectWorkspacePath,
     }),
-    systemPrompt: opts.systemPrompt,
+    systemPrompt: resolvedSystemPrompt,
     cwd: projectWorkspacePath,
     env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
     model: opts.model,

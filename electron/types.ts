@@ -86,6 +86,8 @@ export interface AppConfig {
   defaultVideoType: VideoType;
   /** Model id passed to the Claude Agent SDK on every run. */
   selectedModel: string;
+  /** Persona id whose voicePrompt is appended to the agent system prompt. */
+  selectedPersona: string;
   onboardingComplete: boolean;
 }
 
@@ -96,6 +98,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   defaultFormats: ["linkedin", "x"],
   defaultVideoType: "product-launch",
   selectedModel: "claude-opus-4-7",
+  selectedPersona: "founder",
   onboardingComplete: false,
 };
 
@@ -151,6 +154,83 @@ export function findModel(id: string): ModelOption | undefined {
   return MODEL_OPTIONS.find((m) => m.id === id);
 }
 
+// ─── Personas — voice/tone overrides applied at run time ─────────────────
+// Each persona prepends a small directive block to the agent's system
+// prompt. 'founder' is the default (empty override — system.md already
+// specifies the senior-founder voice). The other personas reshape the
+// narration style without changing the pipeline structure.
+
+export interface PersonaOption {
+  id: string;
+  label: string;
+  description: string;
+  /**
+   * Block of voice instructions appended to the system prompt at run time.
+   * Empty string for the default 'founder' persona — that voice is already
+   * baked into agent/prompts/system.md.
+   */
+  voicePrompt: string;
+}
+
+export const PERSONAS: PersonaOption[] = [
+  {
+    id: "founder",
+    label: "Founder",
+    description: "Senior technical founder — contrarian hook, specific claims, no marketing-speak.",
+    voicePrompt: "",
+  },
+  {
+    id: "conversational",
+    label: "Conversational",
+    description: "Podcast-style dialogue. Two voices trade insight — warm, casual, back-and-forth.",
+    voicePrompt: [
+      "PERSONA OVERRIDE — Conversational / podcast-style dialogue.",
+      "",
+      "Write this video as a two-speaker conversation. Both speakers appear in every scene's narration field, prefixed with `[A]:` and `[B]:` markers (one turn per line, blank line between speakers).",
+      "",
+      "- Speaker A is the host: curious, asks the question that opens the scene.",
+      "- Speaker B is the expert: answers with specifics, examples, the actual claim.",
+      "- Keep individual turns to 1–2 sentences. 4–8 turns per scene total.",
+      "- Maintain the founder voice rules (no marketing-speak, no forbidden words, specifics over generalities).",
+      "- Stage 4 (TTS): generate per-speaker WAV clips. Use voice `af_bella` for A and `am_michael` for B. Each scene's manifest entry should list both clips with their speaker tag and a sequencing offset so they play in order.",
+      "- Stage 5 (composition): show a small speaker label that swaps in/out as the active speaker changes — same Atelier Noir typographic palette, brass for A's label, cinnabar for B's label.",
+      "- The script.json scenes array gains an optional `speakers: [{ speaker: 'A' | 'B', text: string, durationSec: number }]` field that the composition reads. Keep the legacy `narration` field too as a flat-text rollup for backward compatibility with single-voice tools.",
+    ].join("\n"),
+  },
+  {
+    id: "technical",
+    label: "Technical",
+    description: "Engineer-to-engineer. Precise jargon, real numbers, no hand-waving.",
+    voicePrompt: [
+      "PERSONA OVERRIDE — Technical / engineer-to-engineer.",
+      "",
+      "- Use precise terminology and tool/protocol names.",
+      "- Cite real benchmarks: latency p50/p99, throughput, memory, cost figures.",
+      "- Code spans (`vector_search`, `768-d embedding`) where they sharpen the claim.",
+      "- Skip explanatory hand-waving — the audience is fluent.",
+      "- The hook can be a contrarian engineering claim (\"O(n²) is the original sin of vector retrieval\").",
+    ].join("\n"),
+  },
+  {
+    id: "editorial",
+    label: "Editorial",
+    description: "Long-form magazine narrative. Slower hooks, layered sentences, room for reflection.",
+    voicePrompt: [
+      "PERSONA OVERRIDE — Editorial / long-form magazine.",
+      "",
+      "- Each scene narration runs 3–4 sentences instead of 1–2.",
+      "- Use layered sentence structures — independent clauses, vivid imagery, occasional dependent clauses for rhythm.",
+      "- Hook can be slower and more anticipatory; trust the viewer to wait.",
+      "- Add one sentence of context before the substantive claim in each scene.",
+      "- Total duration target: closer to the upper bound of the video type's duration range.",
+    ].join("\n"),
+  },
+];
+
+export function findPersona(id: string): PersonaOption | undefined {
+  return PERSONAS.find((p) => p.id === id);
+}
+
 /** Kokoro voices shipped with HyperFrames. */
 export const VOICE_OPTIONS: Array<{ id: string; label: string; description: string }> = [
   { id: "af_nova", label: "Nova (US-F)", description: "Clear, modern, neutral" },
@@ -179,6 +259,8 @@ export interface GenerateRequest {
   brief?: string;
   /** Model id to drive the agent with. Falls back to config.selectedModel. */
   model?: string;
+  /** Persona id whose voicePrompt overrides the default founder voice. */
+  persona?: string;
 }
 
 export interface UsageInfo {

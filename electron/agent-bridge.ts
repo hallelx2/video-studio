@@ -158,6 +158,7 @@ export class AgentBridge {
           brief: req.brief ?? "",
           // Per-run model override, falling back to the persisted config.
           model: req.model ?? config.selectedModel,
+          persona: req.persona ?? config.selectedPersona,
         }),
       ],
       {

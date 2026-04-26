@@ -9,6 +9,7 @@ type AgentCommand =
       formats: string[];
       brief: string;
       model?: string;
+      persona?: string;
     }
   | { type: "list-projects" };
 
@@ -99,6 +100,7 @@ async function main(): Promise<void> {
           formats: command.formats,
           brief: command.brief,
           model: command.model,
+          persona: command.persona,
           systemPrompt: SYSTEM_PROMPT,
           askUser,
         });
@@ -141,8 +143,20 @@ function parseCommand(args: string[]): AgentCommand | null {
       const brief = String(parsed.brief ?? "");
       const model =
         typeof parsed.model === "string" && parsed.model.length > 0 ? parsed.model : undefined;
+      const persona =
+        typeof parsed.persona === "string" && parsed.persona.length > 0
+          ? parsed.persona
+          : undefined;
       if (!projectId) return null;
-      return { type: "generate-video", projectId, videoType, formats, brief, model };
+      return {
+        type: "generate-video",
+        projectId,
+        videoType,
+        formats,
+        brief,
+        model,
+        persona,
+      };
     } catch {
       return null;
     }

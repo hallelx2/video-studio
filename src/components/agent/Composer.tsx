@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "../../lib/cn.js";
 import type { Artifact, RunStatus } from "../../lib/agent-state.js";
 import { ModelPicker } from "./ModelPicker.js";
+import { PersonaPicker } from "./PersonaPicker.js";
 import { SlashCommandMenu } from "./SlashCommandMenu.js";
 import {
   filterCommands,
@@ -37,8 +38,10 @@ interface ComposerProps {
   hasPendingPrompt: boolean;
   hasHistory: boolean;
   modelId: string;
+  personaId: string;
   artifacts: Artifact[];
   onModelChange: (id: string) => void;
+  onPersonaChange: (id: string) => void;
   onSubmit: (text: string) => void | Promise<void>;
   onStop: () => void | Promise<void>;
   projectName: string;
@@ -178,7 +181,10 @@ export function Composer(props: ComposerProps) {
       >
         {/* Top row: model picker (and any future toolbar items) */}
         <div className="flex items-center justify-between border-b border-paper-mute/10 px-4 py-2.5">
-          <ModelPicker modelId={props.modelId} onChange={props.onModelChange} />
+          <div className="flex items-center gap-2">
+            <ModelPicker modelId={props.modelId} onChange={props.onModelChange} />
+            <PersonaPicker personaId={props.personaId} onChange={props.onPersonaChange} />
+          </div>
           <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
             {modeLabel(mode)}
           </span>

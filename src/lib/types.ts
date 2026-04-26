@@ -10,7 +10,9 @@ export {
   FORMAT_OPTIONS,
   VIDEO_TYPES,
   MODEL_OPTIONS,
+  PERSONAS,
   findModel,
+  findPersona,
 } from "../../electron/types.js";
 
 export type {
@@ -18,6 +20,7 @@ export type {
   AppConfig,
   GenerateRequest,
   ModelOption,
+  PersonaOption,
   ProjectInfo,
   SessionFile,
   SessionMeta,
