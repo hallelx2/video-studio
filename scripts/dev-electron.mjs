@@ -78,11 +78,17 @@ async function startElectron() {
   delete env.ELECTRON_RUN_AS_NODE;
   env.VITE_DEV_SERVER_URL = "http://localhost:5173";
 
+  // Pipe stdio so we can filter Chromium's harmless DevTools noise (Autofill.*
+  // protocol errors that fire whenever DevTools opens against Electron). Pure
+  // log spam — no functional impact, but pollutes the dev log.
   electronProc = spawn(electronBinary, ["."], {
     cwd: root,
-    stdio: "inherit",
+    stdio: ["inherit", "pipe", "pipe"],
     env,
   });
+
+  pipeFiltered(electronProc.stdout, process.stdout);
+  pipeFiltered(electronProc.stderr, process.stderr);
 
   electronProc.on("exit", (code, signal) => {
     // If we killed it for a restart, signal will be set. If the user closed
@@ -128,3 +134,47 @@ const cleanup = () => {
 process.on("SIGINT", cleanup);
 process.on("SIGTERM", cleanup);
 process.on("beforeExit", cleanup);
+
+// ─── Stream filtering ─────────────────────────────────────────────────────
+// Chromium emits a few log messages through Electron's stdio that aren't
+// actionable in dev — most notoriously the Autofill.enable / Autofill.setAddresses
+// protocol errors that fire whenever DevTools opens against Electron (Chromium
+// expects an Autofill handler that Electron doesn't ship; -32601 method-not-
+// found lands in DevTools' protocol_client.js console, which Electron pipes to
+// stdout). Suppress those specific lines, pass everything else through.
+
+const NOISE_PATTERNS = [
+  /Request Autofill\.(enable|setAddresses) failed/,
+  /'Autofill\.(enable|setAddresses)' wasn't found/,
+];
+
+function isNoise(line) {
+  for (const pattern of NOISE_PATTERNS) {
+    if (pattern.test(line)) return true;
+  }
+  return false;
+}
+
+/**
+ * Pipe a child's output stream to a parent stream, dropping lines that match
+ * the known-noise patterns. Buffers partial lines so a chunk that ends mid-
+ * line doesn't cause a false-positive on the next chunk.
+ */
+function pipeFiltered(child, parent) {
+  if (!child) return;
+  let buffer = "";
+  child.on("data", (chunk) => {
+    buffer += chunk.toString("utf8");
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? ""; // keep partial last line for next chunk
+    for (const line of lines) {
+      if (!isNoise(line)) {
+        parent.write(line + "\n");
+      }
+    }
+  });
+  child.on("end", () => {
+    if (buffer && !isNoise(buffer)) parent.write(buffer);
+    buffer = "";
+  });
+}
