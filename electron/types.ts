@@ -459,6 +459,9 @@ export interface StudioBridge {
   meta: {
     appVersion(): Promise<string>;
     platform(): Promise<NodeJS.Platform>;
+    /** Subscribe to native-menu commands (File > New Session, File > Search…).
+     *  Returns an unsubscribe function. */
+    onMenuCommand(handler: (cmd: "new-session" | "open-search") => void): () => void;
   };
   system: {
     /** Run health checks against every required tool — returns a report

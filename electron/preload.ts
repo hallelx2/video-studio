@@ -88,6 +88,16 @@ const bridge: StudioBridge = {
   meta: {
     appVersion: () => ipcRenderer.invoke("meta:app-version") as Promise<string>,
     platform: () => ipcRenderer.invoke("meta:platform") as Promise<NodeJS.Platform>,
+    onMenuCommand: (handler: (cmd: "new-session" | "open-search") => void) => {
+      const listener = (_: unknown, cmd: string) =>
+        handler(cmd as "new-session" | "open-search");
+      ipcRenderer.on("menu:new-session", () => listener(null, "new-session"));
+      ipcRenderer.on("menu:open-search", () => listener(null, "open-search"));
+      return () => {
+        ipcRenderer.removeAllListeners("menu:new-session");
+        ipcRenderer.removeAllListeners("menu:open-search");
+      };
+    },
   },
   system: {
     health: () =>

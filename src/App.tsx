@@ -90,6 +90,18 @@ export function App() {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
 
+  // Native menu → UI commands. File > Search… opens the palette;
+  // File > New Session is delegated to whichever route owns the action
+  // (Workbench listens via the same `menu:new-session` channel).
+  useEffect(() => {
+    const unsub = window.studio?.meta?.onMenuCommand?.((cmd) => {
+      if (cmd === "open-search") setPaletteOpen(true);
+    });
+    return () => {
+      unsub?.();
+    };
+  }, []);
+
   if (!checked) {
     return (
       <div className="grain flex h-screen w-screen items-center justify-center bg-ink">

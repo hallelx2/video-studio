@@ -13,6 +13,7 @@ import {
   saveSession,
 } from "./session-store.js";
 import { runHealthChecks } from "./system-checks.js";
+import { buildAppMenu } from "./app-menu.js";
 import type {
   AgentEvent,
   AppConfig,
@@ -93,6 +94,9 @@ if (!gotLock) {
 app.whenReady().then(async () => {
   registerIpcHandlers();
   await syncConfigToBridge();
+  // Replace Electron's default menu with our own so File/Edit/View/Window
+  // are on-brand and ⌘+ / ⌘- / ⌘0 zoom shortcuts are wired natively.
+  buildAppMenu(() => mainWindow);
   createWindow();
 
   app.on("activate", () => {
