@@ -12,6 +12,7 @@ import {
   renameSession,
   saveSession,
 } from "./session-store.js";
+import { runHealthChecks } from "./system-checks.js";
 import type {
   AgentEvent,
   AppConfig,
@@ -231,4 +232,6 @@ function registerIpcHandlers(): void {
   ipcMain.handle("meta:app-version", async () => app.getVersion());
 
   ipcMain.handle("meta:platform", async () => process.platform);
+
+  ipcMain.handle("system:health", async () => runHealthChecks());
 }

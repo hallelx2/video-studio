@@ -387,6 +387,30 @@ export interface StudioBridge {
     appVersion(): Promise<string>;
     platform(): Promise<NodeJS.Platform>;
   };
+  system: {
+    /** Run health checks against every required tool — returns a report
+     *  the Settings page renders as a status table. Slow path (~2-8s on
+     *  first call, fast on cached PATH lookups), so cache from the renderer
+     *  side. */
+    health(): Promise<HealthReport>;
+  };
+}
+
+// Re-exported from system-checks.ts via the ambient declaration below so
+// the renderer can import it without reaching into Node-only code.
+export interface HealthEntry {
+  key: string;
+  label: string;
+  required: boolean;
+  ok: boolean;
+  version: string | null;
+  path: string | null;
+  note: string | null;
+}
+
+export interface HealthReport {
+  checkedAt: number;
+  entries: HealthEntry[];
 }
 
 // ─── Session types (shared between renderer and main) ────────────────────

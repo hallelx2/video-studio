@@ -89,6 +89,12 @@ const bridge: StudioBridge = {
     appVersion: () => ipcRenderer.invoke("meta:app-version") as Promise<string>,
     platform: () => ipcRenderer.invoke("meta:platform") as Promise<NodeJS.Platform>,
   },
+  system: {
+    health: () =>
+      ipcRenderer.invoke("system:health") as Promise<
+        import("./types.js").HealthReport
+      >,
+  },
 };
 
 contextBridge.exposeInMainWorld("studio", bridge);

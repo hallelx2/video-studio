@@ -19,6 +19,8 @@ export type {
   AgentEvent,
   AppConfig,
   GenerateRequest,
+  HealthEntry,
+  HealthReport,
   ModelOption,
   PersonaOption,
   ProjectInfo,

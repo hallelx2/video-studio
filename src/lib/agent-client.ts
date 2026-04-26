@@ -7,6 +7,7 @@ import type {
   AgentEvent,
   AppConfig,
   GenerateRequest,
+  HealthReport,
   ProjectInfo,
   SessionFile,
   SessionMeta,
@@ -137,6 +138,10 @@ export async function renameSession(
 
 export async function deleteSession(projectId: string, sessionId: string): Promise<void> {
   return studio().sessions.delete(projectId, sessionId);
+}
+
+export async function getSystemHealth(): Promise<HealthReport> {
+  return studio().system.health();
 }
 
 /**
