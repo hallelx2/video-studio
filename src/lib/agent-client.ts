@@ -62,6 +62,13 @@ export async function pickFolder(title?: string): Promise<string | null> {
   return studio().dialog.pickFolder(title);
 }
 
+export async function pickFile(args?: {
+  title?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
+}): Promise<string | null> {
+  return studio().dialog.pickFile(args);
+}
+
 export async function readText(path: string): Promise<string | null> {
   return studio().fs.readText(path);
 }

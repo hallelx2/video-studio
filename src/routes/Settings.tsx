@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   getConfig,
   getSystemHealth,
+  pickFile,
   pickFolder,
   saveConfig,
 } from "../lib/agent-client.js";
@@ -106,6 +107,16 @@ export function SettingsRoute() {
   const pickOutput = async () => {
     const path = await pickFolder("Pick where rendered MP4s should land");
     if (path) update("outputDirectory", path);
+  };
+  const pickPython = async () => {
+    const path = await pickFile({
+      title: "Pick the Python interpreter to use for hyperframes tts",
+      filters:
+        navigator.platform.toLowerCase().startsWith("win")
+          ? [{ name: "Python", extensions: ["exe"] }]
+          : undefined,
+    });
+    if (path) update("pythonBin", path);
   };
 
   return (
@@ -396,19 +407,32 @@ export function SettingsRoute() {
             )}
 
             {activeTab === "advanced" && (
-              <Section
-                title="Advanced"
-                description="Knobs that most people will never need to touch."
-              >
-                <NumberField
-                  label="HyperFrames preview port"
-                  description="Port the dev server binds to when you launch a composition preview."
-                  value={config.previewPort}
-                  min={1024}
-                  max={65535}
-                  onChange={(v) => update("previewPort", v)}
-                />
-              </Section>
+              <>
+                <Section
+                  eyebrow="01"
+                  title="Python interpreter"
+                  description="Pin a specific python.exe so hyperframes tts always reaches the interpreter where you installed kokoro-onnx + soundfile. Leave empty to let the runtime auto-detect from PATH. Set this when you have multiple Pythons (e.g. the Microsoft Store stub on Windows) or use venvs / conda envs that aren't always activated when Video Studio launches."
+                >
+                  <PathRow
+                    label="python.exe"
+                    value={config.pythonBin}
+                    placeholder="Optional — leave empty to auto-detect from PATH"
+                    onPick={pickPython}
+                    onClear={() => update("pythonBin", null)}
+                  />
+                </Section>
+
+                <Section eyebrow="02" title="HyperFrames preview port">
+                  <NumberField
+                    label="Port"
+                    description="Port the dev server binds to when you launch a composition preview."
+                    value={config.previewPort}
+                    min={1024}
+                    max={65535}
+                    onChange={(v) => update("previewPort", v)}
+                  />
+                </Section>
+              </>
             )}
           </div>
         </main>
@@ -578,6 +602,48 @@ function RadioGrid({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function PathRow({
+  label,
+  value,
+  placeholder,
+  onPick,
+  onClear,
+}: {
+  label: string;
+  value: string | null;
+  placeholder: string;
+  onPick: () => void;
+  onClear?: () => void;
+}) {
+  return (
+    <div className="hairline flex w-full items-center justify-between border bg-ink-raised px-5 py-4">
+      <div className="block min-w-0 flex-1">
+        <span className="block text-sm font-medium text-paper">{label}</span>
+        <span className="mt-1 block truncate font-mono text-xs text-paper-mute">
+          {value ?? placeholder}
+        </span>
+      </div>
+      <div className="flex shrink-0 items-baseline gap-5">
+        {value && onClear && (
+          <button
+            onClick={onClear}
+            className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-alarm"
+            title="Clear and fall back to PATH auto-detection"
+          >
+            clear
+          </button>
+        )}
+        <button
+          onClick={onPick}
+          className="border-b border-cinnabar pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cinnabar transition-colors hover:text-paper"
+        >
+          {value ? "change →" : "pick →"}
+        </button>
+      </div>
     </div>
   );
 }

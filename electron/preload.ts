@@ -68,6 +68,8 @@ const bridge: StudioBridge = {
   },
   dialog: {
     pickFolder: (title) => ipcRenderer.invoke("dialog:pick-folder", title) as Promise<string | null>,
+    pickFile: (args) =>
+      ipcRenderer.invoke("dialog:pick-file", args) as Promise<string | null>,
   },
   shell: {
     openPath: (path) => ipcRenderer.invoke("shell:open-path", path) as Promise<void>,

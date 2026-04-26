@@ -258,6 +258,20 @@ function registerIpcHandlers(): void {
     return result.filePaths[0];
   });
 
+  ipcMain.handle(
+    "dialog:pick-file",
+    async (_, args?: { title?: string; filters?: Electron.FileFilter[] }) => {
+      if (!mainWindow) return null;
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: args?.title ?? "Pick a file",
+        properties: ["openFile"],
+        filters: args?.filters,
+      });
+      if (result.canceled || result.filePaths.length === 0) return null;
+      return result.filePaths[0];
+    }
+  );
+
   ipcMain.handle("shell:open-path", async (_, path: string) => {
     await shell.openPath(path);
   });
@@ -272,7 +286,7 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("preview:start", async (_, workspacePath: string) => {
     const cfg = await loadConfig().catch(() => null);
-    return agent.startPreview(workspacePath, cfg?.previewPort);
+    return agent.startPreview(workspacePath, cfg?.previewPort, cfg?.pythonBin);
   });
 
   ipcMain.handle("preview:stop", async () => {

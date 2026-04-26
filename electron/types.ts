@@ -116,6 +116,14 @@ export interface AppConfig {
   notificationsEnabled: boolean;
   /** Optional display name for the active profile. Free text. */
   profileName: string;
+  /** Absolute path to the Python interpreter that hyperframes tts (Kokoro)
+   *  should use. Set when the user has multiple Pythons on PATH and the
+   *  default invocation lands on the wrong one (Microsoft Store stub on
+   *  Windows is the canonical case). The bridge exports this as the
+   *  `PYTHON` env var AND prepends its dirname to `PATH` so anything
+   *  downstream that doesn't honor `PYTHON` still sees the right binary
+   *  first. Null = let the runtime auto-detect from PATH. */
+  pythonBin: string | null;
   onboardingComplete: boolean;
 }
 
@@ -135,6 +143,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   previewPort: 3002,
   notificationsEnabled: true,
   profileName: "Default",
+  pythonBin: null,
   onboardingComplete: false,
 };
 
@@ -443,6 +452,12 @@ export interface StudioBridge {
   };
   dialog: {
     pickFolder(title?: string): Promise<string | null>;
+    /** OS open-file dialog. Optional filters narrow the visible files
+     *  (e.g. `{ name: "Executables", extensions: ["exe"] }`). */
+    pickFile(args?: {
+      title?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+    }): Promise<string | null>;
   };
   shell: {
     openPath(path: string): Promise<void>;

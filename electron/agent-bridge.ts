@@ -5,9 +5,32 @@ import {
 } from "node:child_process";
 import { app, Notification, type BrowserWindow } from "electron";
 import { connect as netConnect } from "node:net";
-import { resolve, join } from "node:path";
+import { resolve, join, dirname, delimiter } from "node:path";
 import { existsSync, mkdirSync } from "node:fs";
 import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
+
+/**
+ * Build the env-var overrides that pin the Python interpreter when the user
+ * has set `pythonBin` in config. Two levers — set together so we cover any
+ * tool's discovery strategy:
+ *
+ *   - `PYTHON=<absolute-path>`: honored by node-python bridges, conda
+ *     wrappers, and most "find me a Python" libs.
+ *   - `PATH` with `dirname(pythonBin)` prepended: so anything that just
+ *     calls `python` resolves to this binary first, regardless of whether
+ *     it reads `PYTHON`.
+ *
+ * Returns an empty object when `pythonBin` is null so the spread is a no-op.
+ */
+function applyPythonBin(pythonBin: string | null | undefined): NodeJS.ProcessEnv {
+  if (!pythonBin) return {};
+  const binDir = dirname(pythonBin);
+  const currentPath = process.env.PATH ?? "";
+  return {
+    PYTHON: pythonBin,
+    PATH: `${binDir}${delimiter}${currentPath}`,
+  };
+}
 
 /**
  * Probe localhost:<port> until something accepts a TCP connection or we run
@@ -102,7 +125,11 @@ export class AgentBridge {
     };
   }
 
-  async startPreview(workspacePath: string, port?: number): Promise<{ url: string }> {
+  async startPreview(
+    workspacePath: string,
+    port?: number,
+    pythonBin?: string | null
+  ): Promise<{ url: string }> {
     const resolvedPort = port ?? 3002;
     // If a preview is already running for the same workspace, reuse it.
     if (this.isPreviewRunning() && this.previewWorkspace === workspacePath && this.previewUrl) {
@@ -122,7 +149,13 @@ export class AgentBridge {
       // bare EINVAL — the file isn't a real PE binary. Run through the
       // shell so cmd.exe resolves the .cmd shim correctly.
       shell: process.platform === "win32",
-      env: { ...process.env, BROWSER: "none" },
+      env: {
+        ...process.env,
+        BROWSER: "none",
+        // Same Python pin we apply to the agent spawn — preview's bundler
+        // can also shell out to Python for asset processing.
+        ...applyPythonBin(pythonBin ?? null),
+      },
     });
 
     this.previewProc = proc;
@@ -261,6 +294,11 @@ export class AgentBridge {
           // Preview port for `npx hyperframes preview` — surfaced so the
           // agent and the bridge agree on the URL.
           PREVIEW_PORT: String(config.previewPort ?? 3002),
+          // Pin the Python interpreter for hyperframes tts (and anything
+          // else that shells into Python). Honored by tools that read
+          // `PYTHON` env var, and the dirname is prepended to PATH so
+          // tools that just call `python` find it first too.
+          ...applyPythonBin(config.pythonBin),
         },
       }
     );
