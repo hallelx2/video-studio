@@ -271,6 +271,36 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
 
     if (state.status === "idle") state.status = "running";
 
+    // If a prompt was outstanding and the agent just emitted a "moving on"
+    // signal (next progress, text, tool call, or result), clear the prompt
+    // so the InlineApproval card unmounts and the new stage's activity
+    // takes its place at the bottom of the stream. Background telemetry
+    // (agent_log, raw stderr) doesn't count — the prompt is only resolved
+    // when the agent itself has clearly resumed work.
+    if (
+      state.pendingPrompt !== null &&
+      (event.type === "progress" ||
+        event.type === "agent_text" ||
+        event.type === "agent_tool_use" ||
+        event.type === "agent_tool_result")
+    ) {
+      state.pendingPrompt = null;
+      if (state.status === "awaiting_input") state.status = "running";
+    }
+
+    // The bridge surfaces a recoverable agent-respond error when the user
+    // clicks approve/cancel after the agent already exited. The prompt is
+    // now orphaned (the dead bridge can't deliver the response anyway),
+    // so clear it and let the user start a fresh run.
+    if (
+      state.pendingPrompt !== null &&
+      event.type === "error" &&
+      event.scope === "agent-respond"
+    ) {
+      state.pendingPrompt = null;
+      if (state.status === "awaiting_input") state.status = "running";
+    }
+
     switch (event.type) {
       case "user_message": {
         state.activities.push({

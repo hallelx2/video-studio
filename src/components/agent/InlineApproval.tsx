@@ -134,12 +134,34 @@ export function InlineApproval({
   }, [edits, hasEdits, onRespond, scriptPath, submitting]);
 
   return (
-    <article className="hairline relative border-l-2 border-l-cinnabar bg-cinnabar/[0.03] py-4 pl-5 pr-4 enter-rise">
+    <article
+      className={cn(
+        "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
+        submitting
+          ? "border-l-brass bg-brass/[0.04] opacity-75 pointer-events-none"
+          : "border-l-cinnabar bg-cinnabar/[0.03]"
+      )}
+      aria-busy={submitting}
+    >
       <header className="flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <span className="pulse-cinnabar h-1 w-1 self-center rounded-full bg-cinnabar" />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-            {isScriptApproval ? "review · script" : "agent paused"}
+          <span
+            className={cn(
+              "pulse-cinnabar h-1 w-1 self-center rounded-full",
+              submitting ? "bg-brass" : "bg-cinnabar"
+            )}
+          />
+          <span
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-widest",
+              submitting ? "text-brass" : "text-cinnabar"
+            )}
+          >
+            {submitting
+              ? "submitted · agent resuming"
+              : isScriptApproval
+                ? "review · script"
+                : "agent paused"}
           </span>
           {revision !== undefined && revision > 0 && (
             <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
@@ -183,9 +205,11 @@ export function InlineApproval({
 
       <footer className="mt-4 flex items-center justify-end gap-8">
         <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
-          {hasEdits
-            ? `${editCount} edit${editCount === 1 ? "" : "s"} — will save before approving`
-            : "click any scene to tamper · type below for structural changes"}
+          {submitting
+            ? "approved — waiting for the next stage to start…"
+            : hasEdits
+              ? `${editCount} edit${editCount === 1 ? "" : "s"} — will save before approving`
+              : "click any scene to tamper · type below for structural changes"}
         </span>
         {prompt.options.map((opt) => {
           if (opt === "approve") {
@@ -197,13 +221,11 @@ export function InlineApproval({
                 className={cn(
                   "border-b pb-1 text-sm font-medium transition-colors",
                   submitting
-                    ? "cursor-not-allowed border-paper-mute/30 text-paper-mute/40"
-                    : hasEdits
-                      ? "border-cinnabar text-cinnabar hover:text-paper"
-                      : "border-cinnabar text-cinnabar hover:text-paper"
+                    ? "cursor-not-allowed border-brass/40 text-brass"
+                    : "border-cinnabar text-cinnabar hover:text-paper"
                 )}
               >
-                {hasEdits ? "save & approve →" : "approve →"}
+                {submitting ? "approving…" : hasEdits ? "save & approve →" : "approve →"}
               </button>
             );
           }
@@ -389,13 +411,18 @@ function EditableField({
 function ActionButton({
   option,
   disabled,
+  inflight,
   onClick,
 }: {
   option: string;
   disabled?: boolean;
+  /** True when this specific option is the one being submitted — swaps
+   *  the label to "<verb>ing…" so the user sees their click landed. */
+  inflight?: boolean;
   onClick: () => void;
 }) {
   const tone = toneFor(option);
+  const label = inflight ? `${option}ing…` : `${option} →`;
   return (
     <button
       onClick={onClick}
@@ -403,12 +430,13 @@ function ActionButton({
       className={cn(
         "border-b pb-1 text-sm font-medium transition-colors",
         disabled && "cursor-not-allowed opacity-50",
-        tone === "primary" && "border-cinnabar text-cinnabar hover:text-paper",
-        tone === "danger" && "border-alarm text-alarm hover:text-paper",
-        tone === "neutral" && "border-brass text-paper-mute hover:text-paper"
+        inflight && "border-brass/40 text-brass",
+        !inflight && tone === "primary" && "border-cinnabar text-cinnabar hover:text-paper",
+        !inflight && tone === "danger" && "border-alarm text-alarm hover:text-paper",
+        !inflight && tone === "neutral" && "border-brass text-paper-mute hover:text-paper"
       )}
     >
-      {option} →
+      {label}
     </button>
   );
 }
@@ -429,9 +457,11 @@ function ClarificationCard({
 }) {
   const context = (prompt.payload as { context?: string }).context ?? null;
   const [submitting, setSubmitting] = useState(false);
+  const [chosen, setChosen] = useState<string | null>(null);
 
   const handlePick = async (value: string) => {
     if (submitting) return;
+    setChosen(value);
     setSubmitting(true);
     try {
       await onRespond(value);
@@ -441,12 +471,32 @@ function ClarificationCard({
   };
 
   return (
-    <article className="hairline relative border-l-2 border-l-brass bg-brass/[0.04] py-4 pl-5 pr-4 enter-rise">
+    <article
+      className={cn(
+        "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
+        submitting
+          ? "border-l-paper-mute/40 bg-paper-mute/[0.05] opacity-75 pointer-events-none"
+          : "border-l-brass bg-brass/[0.04]"
+      )}
+      aria-busy={submitting}
+    >
       <header className="flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <span className="pulse-cinnabar h-1 w-1 self-center rounded-full bg-brass" />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
-            agent · clarifying question
+          <span
+            className={cn(
+              "pulse-cinnabar h-1 w-1 self-center rounded-full",
+              submitting ? "bg-paper-mute/60" : "bg-brass"
+            )}
+          />
+          <span
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-widest",
+              submitting ? "text-paper-mute" : "text-brass"
+            )}
+          >
+            {submitting
+              ? `answered · ${chosen ?? "reply sent"}`
+              : "agent · clarifying question"}
           </span>
         </div>
         <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
@@ -565,19 +615,37 @@ function ComposeApproval({
       : null;
 
   return (
-    <article className="hairline relative border-l-2 border-l-cinnabar bg-cinnabar/[0.03] py-4 pl-5 pr-4 enter-rise">
+    <article
+      className={cn(
+        "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
+        submitting
+          ? "border-l-brass bg-brass/[0.04] opacity-75 pointer-events-none"
+          : "border-l-cinnabar bg-cinnabar/[0.03]"
+      )}
+      aria-busy={submitting}
+    >
       <header className="flex items-baseline justify-between gap-4">
         <div className="flex items-baseline gap-3">
-          <span className="pulse-cinnabar h-1 w-1 self-center rounded-full bg-cinnabar" />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-            review · composition
+          <span
+            className={cn(
+              "pulse-cinnabar h-1 w-1 self-center rounded-full",
+              submitting ? "bg-brass" : "bg-cinnabar"
+            )}
+          />
+          <span
+            className={cn(
+              "font-mono text-[10px] uppercase tracking-widest",
+              submitting ? "text-brass" : "text-cinnabar"
+            )}
+          >
+            {submitting ? "submitted · render queued" : "review · composition"}
           </span>
           {revision !== undefined && revision > 0 && (
             <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
               revision {revision}
             </span>
           )}
-          {previewing && (
+          {previewing && !submitting && (
             <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-cinnabar">
               <span className="pulse-cinnabar h-1 w-1 rounded-full bg-cinnabar" />
               dev server · {previewing.aspect}
@@ -673,7 +741,9 @@ function ComposeApproval({
 
       <footer className="mt-4 flex items-center justify-end gap-8">
         <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
-          type below for revision notes · or render
+          {submitting
+            ? "rendering — waiting for the next stage to start…"
+            : "type below for revision notes · or render"}
         </span>
         {prompt.options.map((opt) => (
           <ActionButton
@@ -681,6 +751,7 @@ function ComposeApproval({
             option={opt}
             disabled={submitting}
             onClick={() => handleRespond(opt)}
+            inflight={submitting && opt === "render"}
           />
         ))}
       </footer>
