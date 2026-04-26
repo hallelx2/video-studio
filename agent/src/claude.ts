@@ -71,14 +71,57 @@ function findClaudeCli(): string | undefined {
 }
 
 /**
- * Run a Claude Agent SDK query with streaming.
+ * Patterns we treat as transient SDK / network failures — anything that's
+ * worth a backoff retry instead of failing the run. Stream idle timeouts,
+ * partial responses, socket resets, fetch failures, generic 5xx envelopes.
+ *
+ * The list is conservative: anything that doesn't match falls through and
+ * the run aborts (auth errors, permission errors, malformed model ids etc.
+ * are NOT retryable — there's no point waiting and trying again).
+ */
+const TRANSIENT_PATTERNS: readonly RegExp[] = [
+  /idle timeout/i,
+  /partial response/i,
+  /stream.*timeout/i,
+  /ECONNRESET/i,
+  /ETIMEDOUT/i,
+  /EPIPE/i,
+  /socket hang up/i,
+  /fetch failed/i,
+  /network.*error/i,
+  /503/,
+  /504/,
+];
+
+function isTransientSdkError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return TRANSIENT_PATTERNS.some((re) => re.test(msg));
+}
+
+/**
+ * Run a Claude Agent SDK query with streaming, with retry-with-backoff on
+ * transient stream/network errors.
  *
  * Uses the user's local ~/.claude/ credentials via the SDK's auto-detection.
  * Do NOT set ANTHROPIC_API_KEY in env — that would opt into per-token billing.
  *
  * Streams every assistant message, tool use, and tool result to stdout as JSONL
- * progress events that the Tauri frontend can render live.
+ * progress events that the renderer can show live.
+ *
+ * Retries: up to 2 attempts after the initial call (3 total) on transient
+ * errors only. Exponential backoff: 5s → 15s. Auth/permission/model errors
+ * are NOT retried — they need user action, not a wait.
+ *
+ * Note: a retry restarts the whole agent query from the top of the prompt.
+ * The SDK doesn't expose mid-stream resume, so partial work from a failed
+ * attempt is redone. For idempotent stages (file writes) that's fine; for
+ * anything that costs Opus tokens it's the price of resilience. The
+ * detectResume() pass at the start of generate-video skips entire stages
+ * whose artifacts are already on disk, which absorbs most of the waste.
  */
+const MAX_RETRIES = 2;
+const RETRY_BACKOFF_MS = [5000, 15000] as const;
+
 export async function runAgent(opts: RunAgentOptions): Promise<void> {
   const claudePath = process.env.CLAUDE_CLI_PATH || findClaudeCli();
 
@@ -96,22 +139,52 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
     return;
   }
 
-  const result = query({
-    prompt: opts.prompt,
-    options: {
-      cwd: opts.cwd,
-      systemPrompt: { type: "preset", preset: "claude_code", append: opts.systemPrompt },
-      permissionMode: "bypassPermissions",
-      env: opts.env,
-      includePartialMessages: false,
-      pathToClaudeCodeExecutable: claudePath,
-      // Per-run model override. The SDK passes this through to /v1/messages.
-      ...(opts.model ? { model: opts.model } : {}),
-    },
-  });
+  let attempt = 0;
+  while (true) {
+    try {
+      const result = query({
+        prompt: opts.prompt,
+        options: {
+          cwd: opts.cwd,
+          systemPrompt: { type: "preset", preset: "claude_code", append: opts.systemPrompt },
+          permissionMode: "bypassPermissions",
+          env: opts.env,
+          includePartialMessages: false,
+          pathToClaudeCodeExecutable: claudePath,
+          // Per-run model override. The SDK passes this through to /v1/messages.
+          ...(opts.model ? { model: opts.model } : {}),
+        },
+      });
 
-  for await (const msg of result) {
-    streamMessage(msg);
+      for await (const msg of result) {
+        streamMessage(msg);
+      }
+      return; // clean run — done.
+    } catch (err) {
+      const transient = isTransientSdkError(err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+
+      if (!transient || attempt >= MAX_RETRIES) {
+        // Either non-retryable (auth, perms, etc) or we've exhausted
+        // retries — surface and let the catch in main() turn it into a
+        // fatal error event.
+        throw err;
+      }
+
+      const backoffMs = RETRY_BACKOFF_MS[attempt];
+      attempt += 1;
+      emit({
+        type: "agent_log",
+        level: "retry",
+        text: `Transient SDK error (attempt ${attempt}/${MAX_RETRIES + 1}): ${errMsg} — retrying in ${Math.round(backoffMs / 1000)}s`,
+      });
+      emit({
+        type: "progress",
+        phase: "retrying",
+        message: `Stream interrupted — retry ${attempt}/${MAX_RETRIES + 1} in ${Math.round(backoffMs / 1000)}s`,
+      });
+      await new Promise((r) => setTimeout(r, backoffMs));
+    }
   }
 }
 
