@@ -312,13 +312,10 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   }
 
   // ─── Stage 4: Kokoro TTS narration ─────────────────────────────────────
-  // Stage 4 used to delegate to a Claude subagent that called
-  // `npx hyperframes tts` via Bash — which meant the user only saw one
-  // monolithic tool_result after every WAV was written, and an Opus call
-  // burned context tokens on what's deterministic glue. Now we drive the
-  // subprocess directly from the agent task and stream every line of its
-  // stdout/stderr as agent_log events so the activity stream gets live
-  // "scene 1/5 → 02-context.wav written" updates.
+  // Direct subprocess loop — not delegated to Claude. Wrapped in
+  // withReviewAndRetry so a failure (e.g., kokoro-onnx not installed,
+  // ffmpeg missing) becomes an agent-written review + a retry/cancel
+  // gate the user can act on, not a fatal that kills the run.
   if (resume.skipNarration) {
     emit({
       type: "progress",
@@ -334,11 +331,38 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       progress: 0.45,
     });
 
-    await runNarrationDirect({
-      scriptPath,
-      workspacePath: projectWorkspacePath,
-      ttsVoice,
-    });
+    try {
+      await withReviewAndRetry(
+        () =>
+          runNarrationDirect({
+            scriptPath,
+            workspacePath: projectWorkspacePath,
+            ttsVoice,
+          }),
+        {
+          stageName: "narration",
+          systemPrompt: resolvedSystemPrompt,
+          cwd: projectWorkspacePath,
+          env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
+          model: opts.model,
+          askUser: opts.askUser,
+        }
+      );
+    } catch (err) {
+      // Either the user picked cancel or we exhausted retries. Pause
+      // the run cleanly with the agent's review preserved in the stream
+      // — the user can fix the environment and send a new message; the
+      // detectResume() pass at the top of the next run will pick up
+      // where the WAV cache left off.
+      emit({
+        type: "result",
+        status: "needs_input",
+        message: `Narration paused — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+      return;
+    }
   }
 
   // ─── Stage 5: HyperFrames composition (per aspect ratio) ───────────────
@@ -642,6 +666,151 @@ async function detectResume(args: {
     skipNarration,
     skipCompose,
   };
+}
+
+// ─── Stage failure recovery ────────────────────────────────────────────────
+// Wrap any stage runner in a review-then-ask loop. When the runner throws,
+// we feed the error back to Claude (with sandbox access to the workspace) so
+// the agent can diagnose and write the user a short markdown review. Then
+// we ask the user via askUser whether to retry. This is the difference
+// between "the build crashed, ¯\_(ツ)_/¯" and "kokoro-onnx isn't installed
+// — run `pip install kokoro-onnx soundfile` then click retry".
+//
+// The runner itself is responsible for being idempotent on retry. The TTS
+// runner is — it caches by sha256 hash, so a retry only re-spawns subprocess
+// calls for the scenes that didn't write a hash on the previous attempt.
+
+interface StageRecoveryOpts {
+  stageName: string;
+  systemPrompt: string;
+  cwd: string;
+  env: Record<string, string>;
+  model?: string;
+  askUser: GenerateVideoOptions["askUser"];
+  /** Cap on review-and-retry rounds. Default 3. After that we propagate. */
+  maxAttempts?: number;
+}
+
+async function withReviewAndRetry<T>(
+  runner: () => Promise<T>,
+  opts: StageRecoveryOpts
+): Promise<T> {
+  const max = opts.maxAttempts ?? 3;
+  for (let attempt = 1; attempt <= max; attempt++) {
+    try {
+      return await runner();
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (attempt >= max) {
+        // Out of retries — propagate so the caller can emit a clean
+        // result with status: needs_input. Don't blow up the process.
+        throw err;
+      }
+
+      emit({
+        type: "progress",
+        phase: "reviewing_failure",
+        message: `${opts.stageName} failed (attempt ${attempt}/${max}) — agent is reviewing`,
+      });
+
+      // Step 1: hand the failure to Claude for a diagnostic review. The
+      // agent has Bash + Read access to inspect the environment, but is
+      // explicitly told NOT to try fixing things itself — that's the
+      // user's call once they see the review.
+      try {
+        await runAgent({
+          prompt: stageReviewPrompt({
+            stageName: opts.stageName,
+            attempt,
+            maxAttempts: max,
+            errorMessage: errMsg,
+          }),
+          systemPrompt: opts.systemPrompt,
+          cwd: opts.cwd,
+          env: opts.env,
+          model: opts.model,
+        });
+      } catch (reviewErr) {
+        // The review itself blew up — emit a fallback explanation so the
+        // user isn't left staring at a bare stack trace.
+        const reviewMsg =
+          reviewErr instanceof Error ? reviewErr.message : String(reviewErr);
+        emit({
+          type: "agent_text",
+          messageId: `recovery-fallback-${Date.now()}`,
+          text: [
+            `**${opts.stageName} failed** — and the recovery review couldn't run either.`,
+            ``,
+            `Original error:`,
+            "```",
+            errMsg,
+            "```",
+            ``,
+            `Review error: ${reviewMsg}`,
+            ``,
+            `Fix the underlying issue and click retry, or cancel and start fresh.`,
+          ].join("\n"),
+        });
+      }
+
+      // Step 2: pause and ask the user what to do next. The InlineApproval
+      // surfaces "retry" / "cancel" as buttons; free-text revision notes
+      // aren't meaningful here so we don't accept them.
+      const response = await opts.askUser(
+        `${opts.stageName} failed — see review above. Retry, or cancel?`,
+        ["retry", "cancel"],
+        {
+          kind: "stage-failure",
+          stage: opts.stageName,
+          attempt,
+          maxAttempts: max,
+          error: errMsg,
+        }
+      );
+
+      const trimmed = response.trim().toLowerCase();
+      if (trimmed !== "retry") {
+        // User picked cancel (or sent free text we don't support here).
+        // Throw so the caller can emit a clean needs_input result.
+        throw err;
+      }
+      // else fall through to next loop iteration — runner runs again.
+    }
+  }
+  // Unreachable — the loop either returns or throws.
+  throw new Error(`withReviewAndRetry: exhausted ${max} attempts for ${opts.stageName}`);
+}
+
+function stageReviewPrompt(args: {
+  stageName: string;
+  attempt: number;
+  maxAttempts: number;
+  errorMessage: string;
+}): string {
+  return [
+    `STAGE FAILED: ${args.stageName}`,
+    `attempt ${args.attempt}/${args.maxAttempts}`,
+    ``,
+    `Error:`,
+    "```",
+    args.errorMessage,
+    "```",
+    ``,
+    `Your job: write a short, useful review of this failure for the user. Format as markdown, under 150 words.`,
+    ``,
+    `Structure:`,
+    `- **What happened** — one sentence, plain English (don't restate the error verbatim).`,
+    `- **Why** — root cause if you can identify one. Use Bash sparingly to check the environment (which X, X --version, pip list | grep, etc) only if it'd actually help diagnose.`,
+    `- **What to do** — 1-3 concrete steps the user can run to fix it. If a single command fixes it, give that command. If it's an external system issue, say so.`,
+    ``,
+    `Hard rules:`,
+    `- Don't try to fix it yourself — no installing packages, no editing files, no re-running the failed step. The user wants a review, not a rescue.`,
+    `- Don't apologise.`,
+    `- Don't ask the user a question — the runner handles the next step (retry / cancel) on its own.`,
+    `- Keep Bash usage minimal. One or two checks at most.`,
+    ``,
+    `When the review is written, stop. The runner will pause the pipeline and let the user decide.`,
+  ].join("\n");
 }
 
 async function isReadableFile(path: string): Promise<boolean> {
