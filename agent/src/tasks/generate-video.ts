@@ -1,5 +1,7 @@
 import { resolve, join } from "node:path";
 import { promises as fs } from "node:fs";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { runAgent } from "../claude.js";
 import { emit } from "../index.js";
 
@@ -299,6 +301,13 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   }
 
   // ─── Stage 4: Kokoro TTS narration ─────────────────────────────────────
+  // Stage 4 used to delegate to a Claude subagent that called
+  // `npx hyperframes tts` via Bash — which meant the user only saw one
+  // monolithic tool_result after every WAV was written, and an Opus call
+  // burned context tokens on what's deterministic glue. Now we drive the
+  // subprocess directly from the agent task and stream every line of its
+  // stdout/stderr as agent_log events so the activity stream gets live
+  // "scene 1/5 → 02-context.wav written" updates.
   if (resume.skipNarration) {
     emit({
       type: "progress",
@@ -314,16 +323,10 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       progress: 0.45,
     });
 
-    await runAgent({
-      prompt: stageFourPrompt({
-        projectWorkspacePath,
-        ttsVoice,
-        scriptPath,
-      }),
-      systemPrompt: resolvedSystemPrompt,
-      cwd: projectWorkspacePath,
-      env: makeEnv(orgRoot, workspaceRoot, ttsVoice),
-      model: opts.model,
+    await runNarrationDirect({
+      scriptPath,
+      workspacePath: projectWorkspacePath,
+      ttsVoice,
     });
   }
 
@@ -606,6 +609,191 @@ async function listFiles(dir: string): Promise<string[]> {
   }
 }
 
+// ─── Direct narration runner ──────────────────────────────────────────────
+// Replaces the old runAgent-driven Stage 4. Reads script.json, spawns
+// `npx hyperframes tts` per scene, streams every line of subprocess
+// output as an agent_log event so the user sees real progress. Caches by
+// sha256(voice+text) so a re-run only regenerates scenes whose narration
+// actually changed.
+
+interface ScriptScene {
+  id: string;
+  narration: string;
+  durationSec?: number;
+}
+
+async function runNarrationDirect(opts: {
+  scriptPath: string;
+  workspacePath: string;
+  ttsVoice: string;
+}): Promise<void> {
+  const raw = await fs.readFile(opts.scriptPath, "utf8");
+  const script = JSON.parse(raw) as { scenes?: ScriptScene[] };
+  const scenes = script.scenes ?? [];
+  if (scenes.length === 0) {
+    throw new Error("script.json has no scenes — cannot run narration");
+  }
+
+  const narrationDir = join(opts.workspacePath, "narration");
+  await fs.mkdir(narrationDir, { recursive: true });
+
+  const manifest: Array<{
+    id: string;
+    narrationPath: string;
+    durationSec: number;
+    cached: boolean;
+  }> = [];
+
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    if (!scene.id || !scene.narration) {
+      emit({
+        type: "agent_log",
+        level: "tts-skip",
+        text: `scene ${i + 1} missing id or narration — skipped`,
+      });
+      continue;
+    }
+
+    const wavPath = join(narrationDir, `${scene.id}.wav`);
+    const hashPath = `${wavPath}.hash`;
+    const expectedHash = createHash("sha256")
+      .update(`${opts.ttsVoice}\n${scene.narration}`)
+      .digest("hex");
+
+    let cached = false;
+    try {
+      const existing = await fs.readFile(hashPath, "utf8");
+      if (existing.trim() === expectedHash) cached = true;
+    } catch {
+      // no cache — we'll generate fresh
+    }
+
+    const sceneProgress = 0.45 + 0.18 * (i / scenes.length);
+    emit({
+      type: "progress",
+      phase: "narration",
+      message: `scene ${i + 1}/${scenes.length}: ${scene.id} (${cached ? "cached" : "generating"})`,
+      progress: sceneProgress,
+    });
+
+    if (!cached) {
+      await runTtsCommand({
+        text: scene.narration,
+        voice: opts.ttsVoice,
+        outputPath: wavPath,
+        sceneId: scene.id,
+      });
+      await fs.writeFile(hashPath, expectedHash, "utf8");
+    } else {
+      emit({
+        type: "agent_log",
+        level: "tts",
+        text: `[${scene.id}] reusing cached WAV (hash match)`,
+      });
+    }
+
+    manifest.push({
+      id: scene.id,
+      narrationPath: wavPath,
+      // We trust the script's durationSec for now — measuring with ffprobe
+      // would add a second subprocess hop per scene for negligible UX win.
+      durationSec: scene.durationSec ?? 0,
+      cached,
+    });
+  }
+
+  const manifestPath = join(opts.workspacePath, "manifest.json");
+  await fs.writeFile(
+    manifestPath,
+    JSON.stringify({ scenes: manifest }, null, 2),
+    "utf8"
+  );
+  const generatedCount = manifest.filter((m) => !m.cached).length;
+  const cachedCount = manifest.filter((m) => m.cached).length;
+  emit({
+    type: "progress",
+    phase: "narration",
+    message: `narration done — ${generatedCount} generated, ${cachedCount} cached, manifest written`,
+    progress: 0.63,
+  });
+}
+
+function runTtsCommand(args: {
+  text: string;
+  voice: string;
+  outputPath: string;
+  sceneId: string;
+}): Promise<void> {
+  return new Promise((resolveCmd, rejectCmd) => {
+    const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+    const proc = spawn(
+      npx,
+      [
+        "hyperframes",
+        "tts",
+        args.text,
+        "--voice",
+        args.voice,
+        "--output",
+        args.outputPath,
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+        windowsHide: true,
+        // npx.cmd on Windows wants a shell to resolve PATH correctly; explicit
+        // shell flag avoids the spawn EINVAL we otherwise hit on Node 22.
+        shell: process.platform === "win32",
+      }
+    );
+
+    let stderrBuf = "";
+
+    proc.stdout.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        emit({ type: "agent_log", level: "tts", text: `[${args.sceneId}] ${line}` });
+      }
+    });
+
+    proc.stderr.on("data", (chunk: Buffer) => {
+      const text = chunk.toString("utf8");
+      stderrBuf += text;
+      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+        emit({ type: "agent_log", level: "tts-err", text: `[${args.sceneId}] ${line}` });
+      }
+    });
+
+    proc.on("error", (err) => {
+      rejectCmd(
+        new Error(`failed to spawn hyperframes tts for ${args.sceneId}: ${err.message}`)
+      );
+    });
+
+    proc.on("exit", (code) => {
+      if (code === 0) {
+        emit({
+          type: "agent_log",
+          level: "tts",
+          text: `[${args.sceneId}] wrote ${args.outputPath}`,
+        });
+        resolveCmd();
+      } else {
+        const tail = stderrBuf
+          .split(/\r?\n/)
+          .filter(Boolean)
+          .slice(-3)
+          .join("\n");
+        rejectCmd(
+          new Error(
+            `hyperframes tts exited with code ${code} for ${args.sceneId}${tail ? `\n${tail}` : ""}`
+          )
+        );
+      }
+    });
+  });
+}
+
 // ─── Stage prompts ─────────────────────────────────────────────────────────
 // These are the per-stage micro-prompts handed to the agent. The system prompt
 // (agent/prompts/system.md) supplies the full pipeline + rules; these focus
@@ -745,26 +933,6 @@ function reviseCompositionPrompt(args: {
     `- If contrast warnings appear, adjust within the DESIGN.md palette (don't invent new colours).`,
     ``,
     `Stop after the lint passes clean.`,
-  ].join("\n");
-}
-
-function stageFourPrompt(args: {
-  projectWorkspacePath: string;
-  ttsVoice: string;
-  scriptPath: string;
-}): string {
-  return [
-    `STAGE 4 — Kokoro TTS narration.`,
-    ``,
-    `Read ${args.scriptPath}. For each scene, generate narration WAV via:`,
-    ``,
-    `  npx hyperframes tts "<narration>" --voice ${args.ttsVoice} --output ${args.projectWorkspacePath}/narration/<scene-id>.wav`,
-    ``,
-    `Cache by sha256(voice+text) — store the hash next to the wav (<scene-id>.wav.hash). If a scene's hash matches, skip generation.`,
-    ``,
-    `Write ${args.projectWorkspacePath}/manifest.json listing each scene: { id, narrationPath, durationSec } — measure duration with ffprobe or HyperFrames.`,
-    ``,
-    `Emit progress per scene: 'narration: <scene-id> (cached|new)'.`,
   ].join("\n");
 }
 
