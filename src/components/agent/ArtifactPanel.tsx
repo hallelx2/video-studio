@@ -91,7 +91,7 @@ export function ArtifactPanel({
             <li key={group.kind}>
               <h4 className="hairline border-b px-6 pb-1 pt-3 font-mono text-[10px] uppercase tracking-widest text-cinnabar">
                 {artifactKindLabel(group.kind)}
-                <span className="ml-2 tabular text-paper-mute/70">{group.items.length}</span>
+                <span className="ml-2 tabular text-paper-mute/85">{group.items.length}</span>
               </h4>
               <ul>
                 {group.items.map((artifact) => (
@@ -144,7 +144,7 @@ function ArtifactRow({
         />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-mono text-xs text-paper">{artifact.name}</span>
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-paper-mute/70">
+          <span className="mt-0.5 block truncate font-mono text-[10px] text-paper-mute/85">
             {artifact.path}
           </span>
         </span>

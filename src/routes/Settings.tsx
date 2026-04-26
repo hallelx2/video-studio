@@ -385,7 +385,7 @@ function HealthRow({ entry }: { entry: HealthEntry }) {
         <span className="flex items-baseline gap-3">
           <span className="text-sm font-medium text-paper">{entry.label}</span>
           {!entry.required && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
               optional
             </span>
           )}
@@ -394,7 +394,7 @@ function HealthRow({ entry }: { entry: HealthEntry }) {
           )}
         </span>
         {entry.path && (
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-paper-mute/70">
+          <span className="mt-0.5 block truncate font-mono text-[10px] text-paper-mute/85">
             {entry.path}
           </span>
         )}

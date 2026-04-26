@@ -183,7 +183,7 @@ export function InlineApproval({
       )}
 
       <footer className="mt-4 flex items-center justify-end gap-8">
-        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
           {hasEdits
             ? `${editCount} edit${editCount === 1 ? "" : "s"} — will save before approving`
             : "click any scene to tamper · type below for structural changes"}
@@ -450,7 +450,7 @@ function ClarificationCard({
             agent · clarifying question
           </span>
         </div>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
           one-shot
         </span>
       </header>
@@ -692,7 +692,7 @@ function ComposeApproval({
       </ul>
 
       <footer className="mt-4 flex items-center justify-end gap-8">
-        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
           type below for revision notes · or render
         </span>
         {prompt.options.map((opt) => (

@@ -185,7 +185,7 @@ export function Composer(props: ComposerProps) {
             <ModelPicker modelId={props.modelId} onChange={props.onModelChange} />
             <PersonaPicker personaId={props.personaId} onChange={props.onPersonaChange} />
           </div>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
             {modeLabel(mode)}
           </span>
         </div>
@@ -211,7 +211,7 @@ export function Composer(props: ComposerProps) {
 
         {/* Bottom row: hint on the left, actions on the right */}
         <div className="flex items-center justify-between gap-4 border-t border-paper-mute/10 px-4 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/65">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
             {hint}
           </span>
           <div className="flex items-center gap-3">

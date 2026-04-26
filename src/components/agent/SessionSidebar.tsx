@@ -62,7 +62,7 @@ export function SessionSidebar({
         >
           <PlusGlyph className="h-3.5 w-3.5 text-paper-mute group-hover:text-cinnabar" />
           <span>New session</span>
-          <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+          <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
             ⌘N
           </span>
         </button>
@@ -71,13 +71,13 @@ export function SessionSidebar({
       {/* Session list */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {sessions.length === 0 ? (
-          <p className="px-3 py-6 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+          <p className="px-3 py-6 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
             no sessions yet
           </p>
         ) : (
           grouped.map((group) => (
             <section key={group.label} className="mb-4 last:mb-0">
-              <h3 className="px-3 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+              <h3 className="px-3 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
                 {group.label}
               </h3>
               <ul>
@@ -201,7 +201,7 @@ function SessionRow({
               <span className="truncate text-brass">
                 {videoTypeMeta?.label ?? session.scaffold.videoType}
               </span>
-              <span className="shrink-0 tabular text-paper-mute/70">·</span>
+              <span className="shrink-0 tabular text-paper-mute/85">·</span>
               <span className="shrink-0 tabular">{relativeTime(session.updatedAt)}</span>
             </span>
           </span>

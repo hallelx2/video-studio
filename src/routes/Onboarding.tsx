@@ -46,7 +46,7 @@ export function OnboardingRoute() {
               key={s}
               className={cn(
                 "flex items-center gap-2 transition-colors",
-                step === s ? "text-cinnabar" : isDone(step, s) ? "text-paper" : "text-paper-mute/60"
+                step === s ? "text-cinnabar" : isDone(step, s) ? "text-paper" : "text-paper-mute/80"
               )}
             >
               <span className="tabular">{String(i + 1).padStart(2, "0")}</span>

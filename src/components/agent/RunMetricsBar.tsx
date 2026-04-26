@@ -125,7 +125,7 @@ function Status({ status }: { status: RunStatus }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span className="flex items-baseline gap-1.5">
-      <span className="text-paper-mute/70">{label}</span>
+      <span className="text-paper-mute/85">{label}</span>
       {children}
     </span>
   );

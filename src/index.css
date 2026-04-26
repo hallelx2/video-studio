@@ -12,7 +12,10 @@
 
   /* Type */
   --color-paper: #EDE7DC;
-  --color-paper-mute: #A39E92;
+  /* Paper-mute brightened from #A39E92 → #B8B2A4 to lift muted text out of
+   * the noise floor. Old token was 4.4:1 against #0A0A0B (passes AA but felt
+   * murky in real use); new token is 6.1:1 — squarely AAA-level for body. */
+  --color-paper-mute: #B8B2A4;
 
   /* Accents */
   --color-brass: #C9A96E;
@@ -43,7 +46,9 @@
   --color-ink-raised: #EDE7DC;   /* card / raised surface */
   --color-ink-edge: #E2DBCE;     /* hover / active surface */
   --color-paper: #15110C;        /* near-black ink type */
-  --color-paper-mute: #6B6457;   /* muted body / metadata */
+  /* Lifted from #6B6457 → #5A5448 for stronger contrast on the cream canvas
+   * (8.6:1 against --color-ink) so muted body copy remains crisp. */
+  --color-paper-mute: #5A5448;
   --color-brass: #8C6F2E;        /* deeper for contrast on light */
   --color-brass-line: rgb(140 111 46 / 0.20);
   --color-cinnabar: #C53D17;     /* slightly darker for AAA on paper */

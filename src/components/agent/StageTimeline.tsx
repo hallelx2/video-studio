@@ -51,7 +51,7 @@ export function StageTimeline({
                     isActive && "text-paper",
                     isComplete && "text-paper",
                     isError && "text-alarm",
-                    isPending && "text-paper-mute/60"
+                    isPending && "text-paper-mute/80"
                   )}
                 >
                   {stage.label}
@@ -66,7 +66,7 @@ export function StageTimeline({
                 </p>
               )}
               {isComplete && stage.startedAt !== null && stage.endedAt !== null && (
-                <p className="mt-1 font-mono text-[10px] tabular text-paper-mute/70">
+                <p className="mt-1 font-mono text-[10px] tabular text-paper-mute/85">
                   {((stage.endedAt - stage.startedAt) / 1000).toFixed(1)}s
                 </p>
               )}

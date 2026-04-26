@@ -192,7 +192,7 @@ function MultilineBody({
         rows={10}
         autoFocus
         placeholder="Tighten the hook — the current version reads like marketing. Cut scene 03 entirely. Move the proof scene to second-to-last."
-        className="hairline mt-6 w-full resize-y border bg-ink-raised p-4 font-mono text-xs leading-relaxed text-paper placeholder:text-paper-mute/60 focus:border-cinnabar focus:outline-none"
+        className="hairline mt-6 w-full resize-y border bg-ink-raised p-4 font-mono text-xs leading-relaxed text-paper placeholder:text-paper-mute/80 focus:border-cinnabar focus:outline-none"
       />
       <div className="mt-6 flex items-center justify-between">
         <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">

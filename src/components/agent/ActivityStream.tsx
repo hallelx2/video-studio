@@ -97,7 +97,7 @@ export function ActivityStream({
                   <span
                     className={cn(
                       "tabular",
-                      isActive ? "text-cinnabar" : "text-paper-mute/70"
+                      isActive ? "text-cinnabar" : "text-paper-mute/85"
                     )}
                   >
                     {count}
@@ -225,7 +225,7 @@ function Empty({ filter }: { filter: FilterKey }) {
   };
   return (
     <div className="flex h-full items-center justify-center">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+      <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
         {messages[filter]}
       </p>
     </div>

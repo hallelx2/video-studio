@@ -39,7 +39,7 @@ export function EmptyComposerState({
           ))}
         </ul>
 
-        <p className="mt-10 font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+        <p className="mt-10 font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
           or type a brief below ↓
         </p>
       </div>
@@ -72,7 +72,7 @@ function PillCard({
           <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-paper-mute">
             {type.description}
           </p>
-          <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+          <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
             <span className="tabular text-brass">{type.defaultScenes}</span> scenes
             <span className="mx-2 text-paper-mute/40">·</span>
             <span className="tabular text-brass">~{type.defaultDuration}s</span>

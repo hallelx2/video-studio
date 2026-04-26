@@ -59,7 +59,7 @@ export function SlashCommandMenu({
         <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
           commands · {commands.length}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
           ↑↓ nav · ⏎ run · esc close
         </span>
       </header>
@@ -89,7 +89,7 @@ export function SlashCommandMenu({
                   <span className="block truncate font-mono text-sm text-paper">
                     {cmd.name}
                     {cmd.aliases && cmd.aliases.length > 0 && (
-                      <span className="ml-2 text-[10px] text-paper-mute/70">
+                      <span className="ml-2 text-[10px] text-paper-mute/85">
                         {cmd.aliases.map((a) => `/${a}`).join("  ")}
                       </span>
                     )}

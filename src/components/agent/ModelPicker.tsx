@@ -108,7 +108,7 @@ function ModelMenu({ activeId, onPick }: { activeId: string; onPick: (id: string
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search models…"
-            className="w-full bg-transparent font-sans text-sm text-paper placeholder:text-paper-mute/60 focus:outline-none"
+            className="w-full bg-transparent font-sans text-sm text-paper placeholder:text-paper-mute/80 focus:outline-none"
             type="search"
             autoComplete="off"
             spellCheck={false}

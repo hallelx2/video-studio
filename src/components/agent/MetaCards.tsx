@@ -32,7 +32,7 @@ export function ProgressCard({ activity }: { activity: ProgressActivity }) {
 export function LogCard({ activity }: { activity: LogActivity }) {
   return (
     <article className="flex items-baseline gap-3 px-1 py-1">
-      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+      <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
         {activity.level}
       </span>
       <span className="min-w-0 flex-1 break-words font-mono text-[11px] text-paper-mute">

@@ -33,7 +33,7 @@ export function ReasoningCard({ activity }: { activity: TextActivity }) {
         </span>
         <span
           className={cn(
-            "shrink-0 font-mono text-[10px] tabular text-paper-mute/70 transition-transform",
+            "shrink-0 font-mono text-[10px] tabular text-paper-mute/85 transition-transform",
             open && "rotate-90"
           )}
           aria-hidden

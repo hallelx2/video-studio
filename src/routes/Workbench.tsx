@@ -620,7 +620,7 @@ export function WorkbenchRoute({
               </div>
             </Field>
 
-            <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-paper-mute/70">
+            <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-paper-mute/85">
               type into the chat to interrupt mid-run or follow up after a render.
             </p>
           </aside>

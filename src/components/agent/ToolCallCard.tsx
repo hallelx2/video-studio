@@ -83,7 +83,7 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
           </span>
           <span
             className={cn(
-              "font-mono text-[10px] tabular tracking-widest text-paper-mute/70 transition-transform",
+              "font-mono text-[10px] tabular tracking-widest text-paper-mute/85 transition-transform",
               open && "rotate-90"
             )}
             aria-hidden
@@ -273,7 +273,7 @@ function DefaultDetails({
         </Detail>
       )}
       {activity.output === null && activity.status !== "running" && (
-        <p className="font-mono text-[11px] text-paper-mute/70">(no output captured)</p>
+        <p className="font-mono text-[11px] text-paper-mute/85">(no output captured)</p>
       )}
     </>
   );

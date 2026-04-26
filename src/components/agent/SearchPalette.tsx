@@ -136,18 +136,18 @@ export function SearchPalette({
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
             esc
           </span>
         </div>
 
         {/* Body */}
         {loading ? (
-          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
             loading sessions…
           </p>
         ) : filtered.length === 0 ? (
-          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
+          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
             {sessions.length === 0
               ? "no sessions yet · type / in a project to start one"
               : `no matches for "${query}"`}
@@ -173,7 +173,7 @@ export function SearchPalette({
           <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
             {filtered.length} of {sessions.length}
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/60">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
             ↑↓ nav · ⏎ open · esc close
           </span>
         </footer>

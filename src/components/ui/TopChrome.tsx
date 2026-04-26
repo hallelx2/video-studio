@@ -77,16 +77,16 @@ export function TopChrome({
   return (
     <header
       className={cn(
-        "hairline relative z-10 flex h-11 shrink-0 items-center justify-between border-b bg-ink pr-3",
+        "hairline relative z-10 flex h-14 shrink-0 items-center justify-between border-b bg-ink pr-4",
         trafficLightGap
       )}
     >
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-6">
         <BrandMark />
-        <span className="h-4 w-px bg-brass-line" aria-hidden />
-        <nav className="flex items-baseline gap-2 font-mono text-[10px] uppercase tracking-widest">
+        <span className="h-5 w-px bg-brass-line" aria-hidden />
+        <nav className="flex items-baseline gap-2.5 font-mono text-[11px] uppercase tracking-widest">
           {breadcrumb.map((crumb, i) => (
-            <span key={i} className="flex items-center gap-2">
+            <span key={i} className="flex items-center gap-2.5">
               {crumb.to ? (
                 <Link
                   to={crumb.to}
@@ -97,16 +97,18 @@ export function TopChrome({
               ) : (
                 <span className="text-paper">{crumb.label}</span>
               )}
-              {i < breadcrumb.length - 1 && <span className="text-paper-mute/50">/</span>}
+              {i < breadcrumb.length - 1 && (
+                <span className="text-paper-mute/85">/</span>
+              )}
             </span>
           ))}
         </nav>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {running && (
-          <span className="mr-2 flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-            <Pulse size="xs" />
+          <span className="mr-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-cinnabar">
+            <Pulse size="sm" />
             <span>{phase ?? "running"}</span>
           </span>
         )}
@@ -129,48 +131,48 @@ function BrandMark() {
   return (
     <Link
       to="/"
-      className="group inline-flex items-center gap-2.5 transition-colors"
+      className="group inline-flex items-center gap-3 transition-colors"
     >
-      <span className="relative inline-block h-6 w-6">
+      <span className="relative inline-block h-8 w-8">
         <svg
-          viewBox="0 0 24 24"
-          className="h-6 w-6 text-paper transition-transform group-hover:rotate-3"
+          viewBox="0 0 32 32"
+          className="h-8 w-8 text-paper transition-transform group-hover:rotate-3"
           aria-hidden
         >
           {/* Lens ring */}
           <circle
-            cx="12"
-            cy="12"
-            r="10"
+            cx="16"
+            cy="16"
+            r="13.5"
             stroke="currentColor"
-            strokeWidth="1.5"
+            strokeWidth="1.75"
             fill="none"
           />
           {/* Inner aperture suggestion */}
           <circle
-            cx="12"
-            cy="12"
-            r="6.5"
+            cx="16"
+            cy="16"
+            r="9"
             stroke="currentColor"
-            strokeWidth="0.75"
+            strokeWidth="1"
             fill="none"
-            opacity="0.45"
+            opacity="0.55"
           />
           {/* Play triangle */}
           <path
-            d="M10 8.5 L16 12 L10 15.5 Z"
+            d="M13 11.5 L21.5 16 L13 20.5 Z"
             fill="var(--color-cinnabar)"
           />
         </svg>
         {/* REC dot */}
         <span
           aria-hidden
-          className="absolute right-0 top-0 h-1.5 w-1.5 rounded-full bg-cinnabar shadow-[0_0_4px_var(--color-cinnabar-glow)]"
+          className="absolute right-0 top-0 h-2 w-2 rounded-full bg-cinnabar shadow-[0_0_6px_var(--color-cinnabar-glow)]"
         />
       </span>
-      <span className="flex items-baseline gap-1 font-display text-[16px] font-semibold tracking-tight text-paper">
+      <span className="flex items-baseline gap-1.5 font-display text-[18px] font-semibold tracking-tight text-paper">
         Video
-        <span className="italic text-paper-mute/80 transition-colors group-hover:text-paper">
+        <span className="italic text-paper-mute transition-colors group-hover:text-paper">
           Studio
         </span>
       </span>
@@ -196,10 +198,10 @@ function IconButton({
   children: React.ReactNode;
 }) {
   const className = cn(
-    "group inline-flex h-8 w-8 items-center justify-center rounded-md border transition-colors",
+    "group inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors",
     active
       ? "border-brass/60 bg-ink-edge text-paper"
-      : "border-paper-mute/15 text-paper-mute hover:border-paper-mute/30 hover:bg-ink-edge hover:text-paper"
+      : "border-paper-mute/30 text-paper hover:border-brass/50 hover:bg-ink-edge"
   );
   if (to) {
     return (
