@@ -38,6 +38,60 @@ function applyPythonBin(pythonBin: string | null | undefined): NodeJS.ProcessEnv
  * immediately instead of racing the dev server's bind() and showing a
  * Chrome ERR_CONNECTION_REFUSED splash.
  */
+/**
+ * Resolve when the spawned process's stdout emits a line matching `pattern`.
+ * Used to know when HyperFrames preview is past its first-pass bundle —
+ * `bind()` returns long before the composition is actually serveable, so
+ * relying on a TCP probe alone gives the iframe a half-built page.
+ *
+ * Listener stays attached even after resolution so it doesn't interfere
+ * with the existing data handler downstream — we just stop reacting after
+ * the first match.
+ */
+function waitForStdoutMarker(
+  proc: ChildProcess,
+  pattern: RegExp,
+  timeoutMs: number
+): Promise<void> {
+  return new Promise<void>((resolveMarker, rejectMarker) => {
+    if (!proc.stdout) {
+      // No stdout to watch — degrade gracefully, let the TCP probe handle it.
+      resolveMarker();
+      return;
+    }
+    let buffer = "";
+    let settled = false;
+
+    const onData = (chunk: Buffer) => {
+      if (settled) return;
+      buffer += chunk.toString("utf8");
+      // Only test the most recent ~16KB so this never grows unbounded.
+      if (buffer.length > 16384) buffer = buffer.slice(-16384);
+      if (pattern.test(buffer)) {
+        settled = true;
+        clearTimeout(timer);
+        proc.stdout?.off("data", onData);
+        resolveMarker();
+      }
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      proc.stdout?.off("data", onData);
+      rejectMarker(
+        new Error(
+          `preview dev server didn't print its ready marker within ${Math.round(
+            timeoutMs / 1000
+          )}s`
+        )
+      );
+    }, timeoutMs);
+
+    proc.stdout.on("data", onData);
+  });
+}
+
 async function waitForPort(port: number, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   // Hold the last connect-error message as a plain string so TS's flow
@@ -191,12 +245,18 @@ export class AgentBridge {
       this.previewWorkspace = null;
     });
 
-    // Block resolving the IPC promise until the dev server actually answers
-    // on the port — otherwise the renderer's iframe races the server's
-    // bind() and renders Chrome's ERR_CONNECTION_REFUSED page. 30s budget
-    // covers a cold start where HyperFrames downloads bundled Chromium.
+    // Two-phase readiness probe — the TCP bind opens the port long before
+    // the bundler has actually rendered the composition, so an iframe
+    // loaded too early sees a half-built page (or the bundler's loading
+    // splash). Wait for whichever signal arrives last:
+    //   1. TCP `connect()` succeeds (port is bound).
+    //   2. HyperFrames prints its "Studio running" / "Studio http://"
+    //      marker on stdout (the bundler is past first-pass build).
+    // 60s budget covers a cold start where HyperFrames downloads its
+    // bundled Chromium.
+    const readyMarker = waitForStdoutMarker(proc, /Studio (running|http)/i, 60000);
     try {
-      await waitForPort(resolvedPort, 30000);
+      await Promise.all([waitForPort(resolvedPort, 60000), readyMarker]);
     } catch (err) {
       // Probe timed out or hard-failed — kill the spawned proc so we don't
       // leak it, and surface the timeout as a structured error the renderer
