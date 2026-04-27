@@ -210,15 +210,31 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   }
 
   // ─── Stage 3: Script draft + HARD GATE ─────────────────────────────────
+  // Approval is persistent: once the user approves a script we stash its
+  // hash in <workspace>/.approval.json. If the same script comes back on a
+  // follow-up run with the hash unchanged we auto-approve and move on
+  // without re-bothering the user. Editing the script (revise / re-draft)
+  // clears the approval so the next cycle re-prompts.
+  const approvalPath = join(projectWorkspacePath, ".approval.json");
+  const currentScriptHash = await hashFileIfExists(scriptPath);
+  const previousApproval = await readApprovalState(approvalPath);
+  const scriptAlreadyApproved =
+    !!previousApproval &&
+    !!currentScriptHash &&
+    previousApproval.scriptHash === currentScriptHash;
+
   emit({
     type: "progress",
     phase: "drafting_script",
-    message: resume.skipDraftScript
-      ? "Found existing script.json — skipping draft, going straight to approval"
-      : "Drafting script",
+    message: scriptAlreadyApproved
+      ? "Script unchanged from previous approval — skipping the gate"
+      : resume.skipDraftScript
+        ? "Found existing script.json — skipping draft, going straight to approval"
+        : "Drafting script",
     progress: 0.25,
   });
-  let approved = false;
+
+  let approved = scriptAlreadyApproved;
   let revision = 0;
 
   while (!approved && revision < 5) {
@@ -267,6 +283,8 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     const trimmed = response.trim();
 
     if (trimmed === "cancel" || trimmed === "") {
+      // Cancel clears the approval file too — next run starts fresh.
+      await clearApprovalState(approvalPath).catch(() => undefined);
       emit({
         type: "result",
         status: "needs_input",
@@ -277,8 +295,22 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
 
     if (trimmed === "approve") {
       approved = true;
+      const fresh = await hashFileIfExists(scriptPath);
+      await writeApprovalState(approvalPath, {
+        ...(previousApproval ?? {}),
+        scriptHash: fresh,
+        scriptApprovedAt: Date.now(),
+      });
       break;
     }
+
+    // Revision invalidates any prior compose approval too — content
+    // downstream will need to be re-checked.
+    await writeApprovalState(approvalPath, {
+      ...(previousApproval ?? {}),
+      scriptHash: null,
+      composeHash: null,
+    });
 
     // Anything else: treat as revision notes.
     revision += 1;
@@ -407,7 +439,25 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     indexHtml: join(projectWorkspacePath, aspect, "index.html"),
   }));
 
-  let composeApproved = false;
+  // Same persistence trick as script approval — if every composition is
+  // byte-for-byte unchanged from when we approved, skip straight to render.
+  const currentComposeHash = await hashCompositionsIfExist(compositions);
+  const latestApproval = await readApprovalState(approvalPath);
+  const composeAlreadyApproved =
+    !!latestApproval &&
+    !!currentComposeHash &&
+    latestApproval.composeHash === currentComposeHash;
+
+  if (composeAlreadyApproved) {
+    emit({
+      type: "progress",
+      phase: "awaiting_compose_approval",
+      message: "Compositions unchanged from previous approval — going straight to render",
+      progress: 0.8,
+    });
+  }
+
+  let composeApproved = composeAlreadyApproved;
   let composeRevision = 0;
 
   while (!composeApproved && composeRevision < 5) {
@@ -433,6 +483,14 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     const composeTrimmed = composeResponse.trim();
 
     if (composeTrimmed === "cancel" || composeTrimmed === "") {
+      // Cancel clears the compose-side approval but leaves script approval
+      // intact — the user can revise the composition without re-OK-ing
+      // the same script next time.
+      const clearedCompose = await readApprovalState(approvalPath);
+      await writeApprovalState(approvalPath, {
+        ...(clearedCompose ?? {}),
+        composeHash: null,
+      });
       emit({
         type: "result",
         status: "needs_input",
@@ -443,8 +501,22 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
 
     if (composeTrimmed === "render") {
       composeApproved = true;
+      const fresh = await hashCompositionsIfExist(compositions);
+      const beforeRender = await readApprovalState(approvalPath);
+      await writeApprovalState(approvalPath, {
+        ...(beforeRender ?? {}),
+        composeHash: fresh,
+        composeApprovedAt: Date.now(),
+      });
       break;
     }
+
+    // Revision notes — clear the compose hash so the next loop re-prompts.
+    const beforeRevise = await readApprovalState(approvalPath);
+    await writeApprovalState(approvalPath, {
+      ...(beforeRevise ?? {}),
+      composeHash: null,
+    });
 
     // Free text: treat as revision notes for the composition itself
     composeRevision += 1;
@@ -869,6 +941,81 @@ async function listFiles(dir: string): Promise<string[]> {
   } catch {
     return [];
   }
+}
+
+// ─── Approval persistence ─────────────────────────────────────────────────
+// Stash the hashes of artifacts the user has already approved so a follow-up
+// run doesn't re-prompt them when nothing relevant has changed. Lives at
+// <workspace>/.approval.json. Both fields are nullable so each gate can
+// invalidate independently — revising the script clears scriptHash;
+// revising compositions clears composeHash.
+
+interface ApprovalState {
+  scriptHash?: string | null;
+  scriptApprovedAt?: number | null;
+  composeHash?: string | null;
+  composeApprovedAt?: number | null;
+}
+
+async function readApprovalState(path: string): Promise<ApprovalState | null> {
+  try {
+    const raw = await fs.readFile(path, "utf8");
+    const parsed = JSON.parse(raw) as ApprovalState;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeApprovalState(path: string, state: ApprovalState): Promise<void> {
+  try {
+    await fs.writeFile(path, JSON.stringify(state, null, 2), "utf8");
+  } catch {
+    // Approval persistence is best-effort — we don't want a failure here
+    // to derail the run. Worst case the user gets re-prompted.
+  }
+}
+
+async function clearApprovalState(path: string): Promise<void> {
+  try {
+    await fs.unlink(path);
+  } catch {
+    // ENOENT or anything else — fine, nothing to clear.
+  }
+}
+
+async function hashFileIfExists(path: string): Promise<string | null> {
+  try {
+    const buf = await fs.readFile(path);
+    return createHash("sha256").update(buf).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Hash every composition's index.html in deterministic order so a single
+ * string represents the composition set. Returns null if any expected
+ * file is missing — null mismatches whatever's stored, which forces the
+ * approval gate to re-prompt.
+ */
+async function hashCompositionsIfExist(
+  compositions: Array<{ aspect: string; indexHtml: string }>
+): Promise<string | null> {
+  const sorted = [...compositions].sort((a, b) => a.aspect.localeCompare(b.aspect));
+  const h = createHash("sha256");
+  for (const comp of sorted) {
+    try {
+      const buf = await fs.readFile(comp.indexHtml);
+      h.update(comp.aspect);
+      h.update("\n");
+      h.update(buf);
+      h.update("\n---\n");
+    } catch {
+      return null;
+    }
+  }
+  return h.digest("hex");
 }
 
 // ─── Direct narration runner ──────────────────────────────────────────────
