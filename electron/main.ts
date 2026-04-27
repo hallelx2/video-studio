@@ -1,7 +1,7 @@
-import { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } from "electron";
-import { join, dirname } from "node:path";
-import { promises as fs } from "node:fs";
-import { pathToFileURL } from "node:url";
+import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from "electron";
+import { join, dirname, extname } from "node:path";
+import { promises as fs, createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
@@ -101,13 +101,15 @@ function createWindow(): void {
 
 // ─── Custom media protocol ────────────────────────────────────────────────
 // `<video src="studio-media:///...">` lets the renderer play rendered MP4s
-// inside the app instead of handing them off to the OS player. We register
-// the scheme as privileged so it supports HTTP-style range requests
-// (Chromium asks for byte ranges to seek through video).
+// inside the app instead of handing them off to the OS player. The previous
+// pass piped through `net.fetch(file://...)` which doesn't preserve byte-
+// range semantics, and Chromium's <video> element refused to play because
+// it couldn't seek and the Content-Type was missing. This handler streams
+// the file directly with proper Content-Type, Content-Length, and Range
+// support so playback + scrubbing both work.
 //
-// URLs look like `studio-media:///<urlencoded-absolute-path>` so the path
-// survives untouched through URL parsing — Windows drive letters and
-// backslashes don't need special-case handling here.
+// URLs look like `studio-media:///<urlencoded-absolute-path>` so Windows
+// drive letters and special characters survive URL parsing untouched.
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "studio-media",
@@ -121,22 +123,81 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 
+const MEDIA_MIME: Record<string, string> = {
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+  ".m4v": "video/mp4",
+  ".wav": "audio/wav",
+  ".mp3": "audio/mpeg",
+  ".m4a": "audio/mp4",
+  ".ogg": "audio/ogg",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
 function registerMediaProtocol(): void {
   protocol.handle("studio-media", async (request) => {
     try {
       const url = new URL(request.url);
-      // Strip the leading "/" so decodeURIComponent gets just the path.
       const decoded = decodeURIComponent(url.pathname.replace(/^\//, ""));
-      // Defensive: the renderer only ever asks for files under the user's
-      // workspace or projects folder — nothing else should be reachable
-      // through this scheme. We don't enforce that here yet (the workspace
-      // path isn't readily available to this handler), but the renderer
-      // never constructs URLs to anything outside it, and the scheme is
-      // only mounted in our own BrowserWindow.
-      return await net.fetch(pathToFileURL(decoded).toString());
+      const stat = await fs.stat(decoded);
+      if (!stat.isFile()) {
+        return new Response("not a file", { status: 404 });
+      }
+      const total = stat.size;
+      const ext = extname(decoded).toLowerCase();
+      const mime = MEDIA_MIME[ext] ?? "application/octet-stream";
+
+      // Honor Range — Chromium's <video> sends `bytes=N-` for seeking.
+      // Without 206 + Content-Range support, the player can't scrub.
+      const range = request.headers.get("range");
+      if (range) {
+        const match = /^bytes=(\d+)-(\d*)$/.exec(range.trim());
+        if (match) {
+          const start = parseInt(match[1], 10);
+          const end = match[2] ? Math.min(parseInt(match[2], 10), total - 1) : total - 1;
+          if (start >= total || start > end) {
+            return new Response("range not satisfiable", {
+              status: 416,
+              headers: { "Content-Range": `bytes */${total}` },
+            });
+          }
+          const length = end - start + 1;
+          const stream = Readable.toWeb(
+            createReadStream(decoded, { start, end })
+          ) as unknown as ReadableStream<Uint8Array>;
+          return new Response(stream, {
+            status: 206,
+            headers: {
+              "Content-Type": mime,
+              "Content-Length": String(length),
+              "Content-Range": `bytes ${start}-${end}/${total}`,
+              "Accept-Ranges": "bytes",
+              "Cache-Control": "no-store",
+            },
+          });
+        }
+      }
+
+      const stream = Readable.toWeb(
+        createReadStream(decoded)
+      ) as unknown as ReadableStream<Uint8Array>;
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          "Content-Type": mime,
+          "Content-Length": String(total),
+          "Accept-Ranges": "bytes",
+          "Cache-Control": "no-store",
+        },
+      });
     } catch (err) {
       return new Response(`media error: ${(err as Error).message}`, {
-        status: 500,
+        status: err instanceof Error && err.message.includes("ENOENT") ? 404 : 500,
       });
     }
   });
