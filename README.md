@@ -20,6 +20,14 @@
 
 ---
 
+## See it run
+
+https://github.com/hallelx2/video-studio/raw/main/assets/video-studio-demo.mp4
+
+<sub>2-minute walkthrough — script → narration → composition → preview → render, all from one conversation. (If your viewer can't autoplay this, [download the MP4](assets/video-studio-demo.mp4) — 5.4 MB.)</sub>
+
+---
+
 ## What it does
 
 Video Studio is the cockpit for an agent that ships finished videos. You describe what you want; the agent turns that into:
