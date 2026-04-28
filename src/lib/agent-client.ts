@@ -73,6 +73,10 @@ export async function readText(path: string): Promise<string | null> {
   return studio().fs.readText(path);
 }
 
+export async function statPath(path: string) {
+  return studio().fs.stat(path);
+}
+
 export async function writeText(path: string, content: string): Promise<void> {
   return studio().fs.writeText(path, content);
 }

@@ -428,6 +428,14 @@ export interface StudioBridge {
     readText(path: string): Promise<string | null>;
     /** Atomically write UTF-8 text to a file. Creates parent dirs. */
     writeText(path: string, content: string): Promise<void>;
+    /** Lightweight stat probe. Never throws — missing files return exists:false. */
+    stat(path: string): Promise<{
+      exists: boolean;
+      isFile: boolean;
+      size: number;
+      mtimeMs: number;
+      error?: string;
+    }>;
   };
   sessions: {
     /** List sessions for a project (most recent first). */

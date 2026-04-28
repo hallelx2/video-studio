@@ -45,6 +45,14 @@ const bridge: StudioBridge = {
     readText: (path) => ipcRenderer.invoke("fs:read-text", path) as Promise<string | null>,
     writeText: (path, content) =>
       ipcRenderer.invoke("fs:write-text", path, content) as Promise<void>,
+    stat: (path) =>
+      ipcRenderer.invoke("fs:stat", path) as Promise<{
+        exists: boolean;
+        isFile: boolean;
+        size: number;
+        mtimeMs: number;
+        error?: string;
+      }>,
   },
   sessions: {
     list: (projectId) =>

@@ -309,6 +309,32 @@ function registerIpcHandlers(): void {
     await fs.writeFile(path, content, "utf8");
   });
 
+  // Lightweight existence + size probe — used by the inline video player's
+  // error fallback to distinguish "file isn't on disk yet" from "file is
+  // corrupt / wrong codec". The studio-media:// protocol's response code
+  // gets flattened to MEDIA_ERR_SRC_NOT_SUPPORTED by Chromium, so the
+  // renderer needs an out-of-band way to see the underlying truth.
+  ipcMain.handle("fs:stat", async (_, path: string) => {
+    try {
+      const st = await fs.stat(path);
+      return {
+        exists: true,
+        isFile: st.isFile(),
+        size: st.size,
+        mtimeMs: st.mtimeMs,
+      };
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      return {
+        exists: false,
+        isFile: false,
+        size: 0,
+        mtimeMs: 0,
+        error: e.code ?? e.message ?? "stat failed",
+      };
+    }
+  });
+
   ipcMain.handle("dialog:pick-folder", async (_, title?: string) => {
     if (!mainWindow) return null;
     const result = await dialog.showOpenDialog(mainWindow, {

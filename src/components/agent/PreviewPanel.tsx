@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn.js";
-import { openExternal, openPath, revealInFolder } from "../../lib/agent-client.js";
+import { openExternal, openPath, revealInFolder, statPath } from "../../lib/agent-client.js";
 import { usePreview } from "../../lib/preview-context.js";
 
 /**
@@ -69,7 +69,11 @@ export function PreviewPanel() {
               onReady={() => setIframeReady(true)}
             />
           ) : (
-            <VideoView url={current.url} format={current.format} />
+            <VideoView
+              url={current.url}
+              format={current.format}
+              filePath={current.filePath}
+            />
           )}
         </div>
       </aside>
@@ -190,7 +194,15 @@ function IframeView({
 
 // ─── Video variant (rendered MP4) ────────────────────────────────────────
 
-function VideoView({ url, format }: { url: string; format: string }) {
+function VideoView({
+  url,
+  format,
+  filePath,
+}: {
+  url: string;
+  format: string;
+  filePath: string;
+}) {
   // The studio-media:// custom protocol streams the MP4 from disk through
   // the main process. The protocol handler supports range requests so
   // Chromium's <video> element can seek freely.
@@ -208,32 +220,39 @@ function VideoView({ url, format }: { url: string; format: string }) {
     setDiag(null);
   }, [url, reloadKey]);
 
-  // When the <video> element errors, the bare error code rarely tells us
-  // what actually went wrong. Re-fetch the URL through the same protocol
-  // handler so we can surface the real status (404 = file not on disk yet,
-  // 416 = range issue, 500 = handler exception). Chromium translates every
-  // non-2xx into SRC_NOT_SUPPORTED for the <video> element so this fetch
-  // is the only way to distinguish "missing" from "corrupt".
+  // When the <video> errors, the bare error code rarely tells us why.
+  // fetch() can't parse studio-media:// URLs in the renderer, so we go
+  // through the main process via IPC to stat the underlying file. That
+  // distinguishes the three real failure modes:
+  //   - file missing → render didn't finish or wrote elsewhere
+  //   - file present but 0 bytes → render still in flight, mid-write
+  //   - file present and sized → likely a codec / corrupt file issue
   const probeResponse = async () => {
     try {
-      const res = await fetch(url, { method: "GET" });
-      const snippet = res.headers.get("content-type") ?? "(no content-type)";
-      let body = "";
-      if (!res.ok) {
-        try {
-          body = (await res.text()).slice(0, 240);
-        } catch {
-          /* ignore */
-        }
+      const st = await statPath(filePath);
+      if (!st.exists) {
+        setDiag(
+          `file not on disk · ${st.error ?? "ENOENT"} — the render likely never produced this output. Check that Stage 6 finished.`
+        );
+        return;
       }
+      if (!st.isFile) {
+        setDiag(`path exists but is not a file (directory?)`);
+        return;
+      }
+      if (st.size === 0) {
+        setDiag(
+          `file is 0 bytes — render is probably mid-write or failed. Try Retry once Stage 6 finishes.`
+        );
+        return;
+      }
+      const kb = (st.size / 1024).toFixed(1);
       setDiag(
-        `HTTP ${res.status} ${res.statusText || ""} · ${snippet}${
-          body ? ` · ${body}` : ""
-        }`
+        `file is on disk · ${kb} KB · likely a codec or container issue (Chromium <video> only plays H.264/AAC MP4 — try 'open in player ↗')`
       );
     } catch (err) {
       setDiag(
-        `protocol fetch failed: ${err instanceof Error ? err.message : String(err)}`
+        `stat failed: ${err instanceof Error ? err.message : String(err)}`
       );
     }
   };
