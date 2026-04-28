@@ -5,6 +5,55 @@ import { createHash } from "node:crypto";
 import { runAgent } from "../claude.js";
 import { emit } from "../index.js";
 
+// ─── WAV duration measurement ─────────────────────────────────────────────
+// Read just enough of the RIFF/WAVE header to compute the audio duration in
+// seconds, without spawning ffprobe. WAV header layout:
+//   bytes  0– 3 : "RIFF"
+//   bytes  4– 7 : file size - 8
+//   bytes  8–11 : "WAVE"
+//   bytes 12–15 : "fmt "
+//   bytes 16–19 : fmt chunk size
+//   bytes 20–21 : audio format (1 = PCM)
+//   bytes 22–23 : num channels
+//   bytes 24–27 : sample rate
+//   bytes 28–31 : byte rate (sampleRate * channels * bitsPerSample / 8)
+//   ...
+// Duration = (file size - non-data overhead) / byte rate. The 44-byte form
+// works for vanilla PCM WAVs, which is what kokoro-onnx emits. If the WAV
+// has extra metadata chunks before "data" we fall back to scanning for the
+// "data" chunk so we still get an accurate length.
+async function measureWavDurationSec(path: string): Promise<number> {
+  const handle = await fs.open(path, "r");
+  try {
+    const stat = await handle.stat();
+    const totalSize = stat.size;
+    const headerLen = Math.min(totalSize, 4096);
+    const buf = Buffer.alloc(headerLen);
+    await handle.read(buf, 0, headerLen, 0);
+
+    if (buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") {
+      throw new Error("not a RIFF/WAVE file");
+    }
+    const byteRate = buf.readUInt32LE(28);
+    if (!byteRate) throw new Error("zero byte rate in WAV header");
+
+    // Locate the "data" chunk — its size, divided by byteRate, is the duration.
+    for (let off = 12; off < headerLen - 8; off++) {
+      if (buf.toString("ascii", off, off + 4) === "data") {
+        const dataSize = buf.readUInt32LE(off + 4);
+        if (dataSize > 0 && dataSize <= totalSize) {
+          return dataSize / byteRate;
+        }
+        break;
+      }
+    }
+    // Fallback: assume 44-byte header.
+    return Math.max(0, (totalSize - 44) / byteRate);
+  } finally {
+    await handle.close();
+  }
+}
+
 // ─── Subprocess output cleanup ────────────────────────────────────────────
 // Kokoro / hyperframes-tts use tqdm-style progress bars that emit bare \r
 // to overwrite the line in place. Without honoring CR, every partial state
@@ -1114,6 +1163,7 @@ async function runNarrationDirect(opts: {
     id: string;
     narrationPath: string;
     durationSec: number;
+    audioDurationSec: number;
     cached: boolean;
   }> = [];
 
@@ -1166,15 +1216,85 @@ async function runNarrationDirect(opts: {
       });
     }
 
+    // Measure the actual WAV duration directly from its RIFF header — much
+    // cheaper than spawning ffprobe per scene. Without this the manifest
+    // (and downstream Stage 5 composition timing) inherits the script's
+    // estimated durationSec, which is often longer than the synthesized
+    // audio. The result on screen: audio plays at the start of each scene
+    // and the rest is silence, with the scene continuing for several
+    // seconds past the voice. Now we record the truth so the composition
+    // can size each scene to its narration + a small visual pad.
+    let measuredAudioSec: number;
+    try {
+      measuredAudioSec = await measureWavDurationSec(wavPath);
+    } catch (err) {
+      emit({
+        type: "agent_log",
+        level: "tts-warn",
+        text: `[${scene.id}] could not measure WAV duration (${
+          err instanceof Error ? err.message : String(err)
+        }) — falling back to script estimate`,
+      });
+      measuredAudioSec = scene.durationSec ?? 0;
+    }
+
+    // Scene gets the audio length + 0.5s of breathing room at the tail so
+    // the visual doesn't snap to the next scene the instant the voice
+    // ends. If the script asked for LESS time than the audio takes (rare),
+    // honor the audio length so we don't clip mid-word.
+    const PAD_SEC = 0.5;
+    const alignedSceneSec = Math.max(
+      measuredAudioSec + PAD_SEC,
+      scene.durationSec ?? 0
+    );
+    // If the script estimated way more than the audio actually takes,
+    // shrink the scene to match audio + pad — that's the bug we're
+    // fixing. We never expand past the audio length though, only contract.
+    const finalSceneSec = measuredAudioSec > 0
+      ? Math.min(alignedSceneSec, measuredAudioSec + PAD_SEC + 1.0)
+      : (scene.durationSec ?? 0);
+
+    if (
+      typeof scene.durationSec === "number" &&
+      Math.abs(scene.durationSec - finalSceneSec) > 0.4
+    ) {
+      emit({
+        type: "agent_log",
+        level: "tts",
+        text: `[${scene.id}] retiming scene ${scene.durationSec.toFixed(
+          1
+        )}s → ${finalSceneSec.toFixed(1)}s (audio ${measuredAudioSec.toFixed(
+          1
+        )}s + ${PAD_SEC}s pad)`,
+      });
+    }
+    scene.durationSec = Number(finalSceneSec.toFixed(2));
+
     manifest.push({
       id: scene.id,
       narrationPath: wavPath,
-      // We trust the script's durationSec for now — measuring with ffprobe
-      // would add a second subprocess hop per scene for negligible UX win.
-      durationSec: scene.durationSec ?? 0,
+      durationSec: scene.durationSec,
+      audioDurationSec: Number(measuredAudioSec.toFixed(2)),
       cached,
     });
   }
+
+  // Persist the retimed scene durations so Stage 5 (composition) authors
+  // scenes whose data-duration matches the actual audio. Total duration
+  // is recomputed too so the script header stays consistent.
+  const totalDurationSec = scenes.reduce(
+    (sum, s) => sum + (s.durationSec ?? 0),
+    0
+  );
+  await fs.writeFile(
+    opts.scriptPath,
+    JSON.stringify(
+      { ...script, totalDurationSec: Number(totalDurationSec.toFixed(2)) },
+      null,
+      2
+    ),
+    "utf8"
+  );
 
   const manifestPath = join(opts.workspacePath, "manifest.json");
   await fs.writeFile(
