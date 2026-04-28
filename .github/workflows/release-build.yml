@@ -1,0 +1,79 @@
+name: release-build
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            bundle: bundle:win
+            artifact_glob: |
+              dist-electron/*.exe
+              dist-electron/*.msi
+              dist-electron/*.zip
+              dist-electron/*.blockmap
+              dist-electron/latest*.yml
+          - os: macos-latest
+            bundle: bundle:mac
+            artifact_glob: |
+              dist-electron/*.dmg
+              dist-electron/*.zip
+              dist-electron/*.blockmap
+              dist-electron/latest-mac.yml
+          - os: ubuntu-latest
+            bundle: bundle:linux
+            artifact_glob: |
+              dist-electron/*.AppImage
+              dist-electron/*.deb
+              dist-electron/*.rpm
+              dist-electron/*.snap
+              dist-electron/latest-linux.yml
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: install ffmpeg (linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: install ffmpeg (macos)
+        if: matrix.os == 'macos-latest'
+        run: brew install ffmpeg
+
+      - name: install ffmpeg (windows)
+        if: matrix.os == 'windows-latest'
+        run: choco install ffmpeg -y --no-progress
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: bundle
+        run: pnpm ${{ matrix.bundle }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: attach artifacts to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: ${{ matrix.artifact_glob }}
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
