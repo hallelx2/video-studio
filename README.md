@@ -2,6 +2,8 @@
 
 # Video Studio
 
+https://github.com/hallelx2/video-studio/raw/main/assets/video-studio-demo.mp4
+
 **A desktop agent-driven video studio.** Compose, narrate, and render videos through a single in-app conversation with a Claude agent that drafts scripts, lays out HyperFrames compositions, and renders Chromium-safe MP4s — all without leaving the window.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-cyan.svg)](LICENSE)
@@ -17,14 +19,6 @@
 [![Conventional Commits](https://img.shields.io/badge/conventional%20commits-1.0.0-fa6673?logo=conventionalcommits&logoColor=white)](https://www.conventionalcommits.org)
 
 </div>
-
----
-
-## See it run
-
-https://github.com/hallelx2/video-studio/raw/main/assets/video-studio-demo.mp4
-
-<sub>2-minute walkthrough — script → narration → composition → preview → render, all from one conversation. (If your viewer can't autoplay this, [download the MP4](assets/video-studio-demo.mp4) — 5.4 MB.)</sub>
 
 ---
 

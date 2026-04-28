@@ -27,26 +27,26 @@ jobs:
           - os: windows-latest
             bundle: bundle:win
             artifact_glob: |
-              dist-electron/*.exe
-              dist-electron/*.msi
-              dist-electron/*.zip
-              dist-electron/*.blockmap
-              dist-electron/latest*.yml
+              dist/installers/*.exe
+              dist/installers/*.msi
+              dist/installers/*.zip
+              dist/installers/*.blockmap
+              dist/installers/latest*.yml
           - os: macos-latest
             bundle: bundle:mac
             artifact_glob: |
-              dist-electron/*.dmg
-              dist-electron/*.zip
-              dist-electron/*.blockmap
-              dist-electron/latest-mac.yml
+              dist/installers/*.dmg
+              dist/installers/*.zip
+              dist/installers/*.blockmap
+              dist/installers/latest-mac.yml
           - os: ubuntu-latest
             bundle: bundle:linux
             artifact_glob: |
-              dist-electron/*.AppImage
-              dist-electron/*.deb
-              dist-electron/*.rpm
-              dist-electron/*.snap
-              dist-electron/latest-linux.yml
+              dist/installers/*.AppImage
+              dist/installers/*.deb
+              dist/installers/*.rpm
+              dist/installers/*.snap
+              dist/installers/latest-linux.yml
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -75,9 +75,12 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: bundle
-        run: pnpm ${{ matrix.bundle }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # --publish=never tells electron-builder to skip its own GitHub
+        # upload — the release was already published by release-please,
+        # and electron-builder's draft-mode publisher refuses to attach
+        # to a non-draft release ("existingType=release publishingType=
+        # draft"). The next step uploads via softprops instead.
+        run: pnpm ${{ matrix.bundle }} -- --publish=never
 
       - name: attach artifacts to release
         uses: softprops/action-gh-release@v2
