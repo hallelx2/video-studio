@@ -2,7 +2,9 @@
 
 # Video Studio
 
-<video src="https://github.com/hallelx2/video-studio/releases/download/v0.1.1/video-studio-demo.mp4" controls muted playsinline width="800"></video>
+![Video Studio — 2-minute walkthrough](assets/video-studio-demo.gif)
+
+<sub>Prefer audio + full quality? <a href="https://github.com/hallelx2/video-studio/releases/download/v0.1.1/video-studio-demo.mp4">Download the MP4</a> (5.4 MB).</sub>
 
 **A desktop agent-driven video studio.** Compose, narrate, and render videos through a single in-app conversation with a Claude agent that drafts scripts, lays out HyperFrames compositions, and renders Chromium-safe MP4s — all without leaving the window.
 
