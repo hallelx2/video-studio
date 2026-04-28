@@ -54,9 +54,16 @@ const PreviewContext = createContext<PreviewContextValue | null>(null);
  * Build a studio-media:// URL for an absolute filesystem path. The path
  * is URL-encoded as a single segment so Windows drive letters / spaces /
  * unicode in paths all survive the round trip through URL parsing.
+ *
+ * Backslashes are normalized to forward-slashes before encoding — the
+ * Electron main-process handler accepts both, but mixing %5C-encoded
+ * backslashes with the URL parser has bitten us on some Chromium
+ * versions where the percent-encoded path triggered SRC_NOT_SUPPORTED
+ * before the handler ever ran. Forward-slashes are the safest form.
  */
 function mediaUrlFor(filePath: string): string {
-  return `studio-media:///${encodeURIComponent(filePath)}`;
+  const normalized = filePath.replace(/\\/g, "/");
+  return `studio-media:///${encodeURIComponent(normalized)}`;
 }
 
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
