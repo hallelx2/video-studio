@@ -53,6 +53,10 @@ const bridge: StudioBridge = {
         mtimeMs: number;
         error?: string;
       }>,
+    transcodeWebSafe: (path) =>
+      ipcRenderer.invoke("media:transcode-web-safe", path) as Promise<
+        { ok: true; path: string } | { ok: false; error: string }
+      >,
   },
   sessions: {
     list: (projectId) =>

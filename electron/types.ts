@@ -436,6 +436,15 @@ export interface StudioBridge {
       mtimeMs: number;
       error?: string;
     }>;
+    /**
+     * Transcode an MP4 in place to a strictly browser-safe profile
+     * (libx264 high@4.0, yuv420p, AAC, +faststart). Lets the renderer
+     * fix renders that Chromium's <video> rejects without re-running
+     * the whole pipeline.
+     */
+    transcodeWebSafe(
+      path: string
+    ): Promise<{ ok: true; path: string } | { ok: false; error: string }>;
   };
   sessions: {
     /** List sessions for a project (most recent first). */

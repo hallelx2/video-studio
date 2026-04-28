@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell, protocol } from "electron";
 import { join, dirname, extname } from "node:path";
 import { promises as fs, createReadStream } from "node:fs";
 import { Readable } from "node:stream";
+import { spawn } from "node:child_process";
 import { AgentBridge } from "./agent-bridge.js";
 import { loadConfig, saveConfig } from "./config.js";
 import { listProjects } from "./projects.js";
@@ -314,6 +315,74 @@ function registerIpcHandlers(): void {
   // corrupt / wrong codec". The studio-media:// protocol's response code
   // gets flattened to MEDIA_ERR_SRC_NOT_SUPPORTED by Chromium, so the
   // renderer needs an out-of-band way to see the underlying truth.
+  // Transcode an MP4 in place into a strictly browser-safe profile so the
+  // in-app <video> player can decode it. The agent's Stage 6 already does
+  // this for new renders, but existing files that were rendered with the
+  // old (HEVC / yuv444p) settings need to be fixed without re-running the
+  // whole pipeline. Writes to <input>.tmp.mp4 then atomically renames so a
+  // failed transcode doesn't destroy the original.
+  ipcMain.handle("media:transcode-web-safe", async (_, inputPath: string) => {
+    const tmpPath = `${inputPath}.tmp.mp4`;
+    const args = [
+      "-y",
+      "-i", inputPath,
+      "-c:v", "libx264",
+      "-profile:v", "high",
+      "-level", "4.0",
+      "-pix_fmt", "yuv420p",
+      "-preset", "fast",
+      "-crf", "20",
+      "-movflags", "+faststart",
+      "-c:a", "aac",
+      "-b:a", "192k",
+      tmpPath,
+    ];
+
+    // Prefer system ffmpeg; fall back to hyperframes' bundled binary which
+    // ships as part of the npx tarball most users already have cached.
+    const candidates: Array<{ cmd: string; args: string[] }> = [
+      { cmd: "ffmpeg", args },
+      {
+        cmd: process.platform === "win32" ? "npx.cmd" : "npx",
+        args: ["hyperframes", "ffmpeg", ...args],
+      },
+    ];
+
+    let lastError = "no ffmpeg attempt succeeded";
+    for (const candidate of candidates) {
+      try {
+        await new Promise<void>((resolveProc, rejectProc) => {
+          const proc = spawn(candidate.cmd, candidate.args, {
+            stdio: ["ignore", "pipe", "pipe"],
+            shell: process.platform === "win32",
+            windowsHide: true,
+          });
+          let stderrTail = "";
+          proc.stderr.on("data", (chunk: Buffer) => {
+            const text = chunk.toString("utf8");
+            stderrTail = (stderrTail + text).slice(-1024);
+          });
+          proc.on("error", (err) => rejectProc(err));
+          proc.on("exit", (code) => {
+            if (code === 0) resolveProc();
+            else
+              rejectProc(
+                new Error(`${candidate.cmd} exited ${code}\n${stderrTail.trim()}`)
+              );
+          });
+        });
+        // Atomic swap: replace the original with the transcoded version.
+        await fs.rename(tmpPath, inputPath);
+        return { ok: true as const, path: inputPath };
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err);
+        await fs.unlink(tmpPath).catch(() => undefined);
+        // Try the next candidate.
+      }
+    }
+    return { ok: false as const, error: lastError };
+  });
+
   ipcMain.handle("fs:stat", async (_, path: string) => {
     try {
       const st = await fs.stat(path);

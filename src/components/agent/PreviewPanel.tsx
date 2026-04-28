@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { cn } from "../../lib/cn.js";
-import { openExternal, openPath, revealInFolder, statPath } from "../../lib/agent-client.js";
+import {
+  openExternal,
+  openPath,
+  revealInFolder,
+  statPath,
+  transcodeWebSafe,
+} from "../../lib/agent-client.js";
 import { usePreview } from "../../lib/preview-context.js";
 
 /**
@@ -214,11 +220,28 @@ function VideoView({
   const [error, setError] = useState<string | null>(null);
   const [diag, setDiag] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [transcoding, setTranscoding] = useState(false);
 
   useEffect(() => {
     setError(null);
     setDiag(null);
   }, [url, reloadKey]);
+
+  const handleFixCodec = async () => {
+    setTranscoding(true);
+    try {
+      const res = await transcodeWebSafe(filePath);
+      if (res.ok) {
+        // Force <video> to remount with a fresh URL so it doesn't keep
+        // the cached failed-decode state.
+        setReloadKey((k) => k + 1);
+      } else {
+        setDiag(`transcode failed: ${res.error}`);
+      }
+    } finally {
+      setTranscoding(false);
+    }
+  };
 
   // When the <video> errors, the bare error code rarely tells us why.
   // fetch() can't parse studio-media:// URLs in the renderer, so we go
@@ -274,12 +297,21 @@ function VideoView({
         <p className="max-w-md font-mono text-[10px] text-fg-muted/70 [overflow-wrap:anywhere]">
           {url}
         </p>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-baseline justify-center gap-4">
           <button
             onClick={() => setReloadKey((k) => k + 1)}
-            className="border-b border-cyan pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cyan hover:text-fg"
+            disabled={transcoding}
+            className="border-b border-cyan pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cyan hover:text-fg disabled:cursor-not-allowed disabled:opacity-60"
           >
             retry ↻
+          </button>
+          <button
+            onClick={() => void handleFixCodec()}
+            disabled={transcoding}
+            title="Re-encode this MP4 in place to a Chromium-safe H.264/yuv420p profile"
+            className="border-b border-cyan pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cyan hover:text-fg disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {transcoding ? "transcoding…" : "fix codec ⚙"}
           </button>
           {!diag && (
             <button

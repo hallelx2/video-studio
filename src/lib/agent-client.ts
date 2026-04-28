@@ -77,6 +77,10 @@ export async function statPath(path: string) {
   return studio().fs.stat(path);
 }
 
+export async function transcodeWebSafe(path: string) {
+  return studio().fs.transcodeWebSafe(path);
+}
+
 export async function writeText(path: string, content: string): Promise<void> {
   return studio().fs.writeText(path, content);
 }
