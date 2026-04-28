@@ -43,6 +43,7 @@ Every step is interruptible. The agent's reasoning streams into an activity feed
 - **Resilient render path** — rendered MP4s are post-processed into Chromium-safe profiles, with a one-click *fix codec* recovery for files that arrived encoded outside the safe set.
 - **Custom `studio-media://` protocol** — the renderer streams arbitrary local files through Electron without exposing the filesystem to the renderer process.
 - **Type-safe IPC bridge** — every renderer ↔ main call is defined once in `electron/types.ts` and consumed identically on both sides.
+- **GitHub-backed auto-update** — installed builds check this repo's releases on launch and hourly thereafter; new versions download in the background and the user is prompted to restart when ready.
 
 ## Stack
 

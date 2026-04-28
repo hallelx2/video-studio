@@ -16,6 +16,7 @@ import {
 } from "./session-store.js";
 import { runHealthChecks } from "./system-checks.js";
 import { buildAppMenu } from "./app-menu.js";
+import { initAutoUpdate } from "./auto-update.js";
 import type {
   AgentEvent,
   AppConfig,
@@ -307,6 +308,8 @@ app.whenReady().then(async () => {
   // are on-brand and ⌘+ / ⌘- / ⌘0 zoom shortcuts are wired natively.
   buildAppMenu(() => mainWindow);
   createWindow();
+  // Wire GitHub-backed auto-update — no-ops in dev (app.isPackaged false).
+  initAutoUpdate(() => mainWindow);
 
   app.on("activate", () => {
     // macOS — re-create window when dock icon is clicked
