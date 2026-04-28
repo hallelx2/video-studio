@@ -200,11 +200,43 @@ function VideoView({ url, format }: { url: string; format: string }) {
   // failures come from (a) the file being mid-write when we mounted, or
   // (b) the path encoding losing a backslash on Windows.
   const [error, setError] = useState<string | null>(null);
+  const [diag, setDiag] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     setError(null);
+    setDiag(null);
   }, [url, reloadKey]);
+
+  // When the <video> element errors, the bare error code rarely tells us
+  // what actually went wrong. Re-fetch the URL through the same protocol
+  // handler so we can surface the real status (404 = file not on disk yet,
+  // 416 = range issue, 500 = handler exception). Chromium translates every
+  // non-2xx into SRC_NOT_SUPPORTED for the <video> element so this fetch
+  // is the only way to distinguish "missing" from "corrupt".
+  const probeResponse = async () => {
+    try {
+      const res = await fetch(url, { method: "GET" });
+      const snippet = res.headers.get("content-type") ?? "(no content-type)";
+      let body = "";
+      if (!res.ok) {
+        try {
+          body = (await res.text()).slice(0, 240);
+        } catch {
+          /* ignore */
+        }
+      }
+      setDiag(
+        `HTTP ${res.status} ${res.statusText || ""} · ${snippet}${
+          body ? ` · ${body}` : ""
+        }`
+      );
+    } catch (err) {
+      setDiag(
+        `protocol fetch failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+  };
 
   if (error) {
     return (
@@ -215,6 +247,11 @@ function VideoView({ url, format }: { url: string; format: string }) {
         <p className="max-w-md text-[12px] text-fg-muted [overflow-wrap:anywhere]">
           {error}
         </p>
+        {diag && (
+          <p className="max-w-md font-mono text-[10px] text-amber-300/85 [overflow-wrap:anywhere]">
+            handler: {diag}
+          </p>
+        )}
         <p className="max-w-md font-mono text-[10px] text-fg-muted/70 [overflow-wrap:anywhere]">
           {url}
         </p>
@@ -225,6 +262,14 @@ function VideoView({ url, format }: { url: string; format: string }) {
           >
             retry ↻
           </button>
+          {!diag && (
+            <button
+              onClick={() => void probeResponse()}
+              className="border-b border-mist-10 pb-0.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted hover:text-fg"
+            >
+              probe protocol
+            </button>
+          )}
         </div>
       </div>
     );
@@ -255,6 +300,9 @@ function VideoView({ url, format }: { url: string; format: string }) {
               el.error?.message ??
               "unknown video error"
           );
+          // Auto-probe so the user immediately sees the real handler
+          // response (HTTP status + body) without an extra click.
+          void probeResponse();
         }}
       >
         Your renderer doesn't support inline video — use "open in player ↗" above.
