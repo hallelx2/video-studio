@@ -6,8 +6,51 @@ import {
 import { app, Notification, type BrowserWindow } from "electron";
 import { connect as netConnect } from "node:net";
 import { resolve, join, dirname, delimiter } from "node:path";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import type { AgentEvent, AppConfig, GenerateRequest } from "./types.js";
+
+/**
+ * `hyperframes preview` unconditionally calls `import("open").then(m =>
+ * m.default(url))` after the studio comes up — there's no `--no-open` flag
+ * and `BROWSER=none` isn't honored by the `open` package. We don't want a
+ * second window popping next to our in-app PreviewPanel iframe, so we
+ * inject a tiny ESM loader hook via `NODE_OPTIONS=--import` that resolves
+ * `open` to a no-op stub. Files are written into Electron's userData dir
+ * on first use so this works in dev, in asar, and on any platform without
+ * extra build wiring.
+ */
+function ensurePreviewNoOpenHook(): string {
+  const dir = join(app.getPath("userData"), "preview-no-open");
+  mkdirSync(dir, { recursive: true });
+  const stubPath = join(dir, "stub.mjs");
+  const loaderPath = join(dir, "loader.mjs");
+  const registerPath = join(dir, "register.mjs");
+  // Stub: `open` returns a child-process-shaped object in the real lib.
+  // Hyperframes ignores the return value, so an unref-able dummy is enough.
+  if (!existsSync(stubPath)) {
+    writeFileSync(
+      stubPath,
+      `export default async function open() {\n  return { unref() {}, on() {}, kill() {} };\n}\nexport const openApp = open;\n`,
+      "utf8"
+    );
+  }
+  if (!existsSync(loaderPath)) {
+    writeFileSync(
+      loaderPath,
+      `const STUB = new URL("./stub.mjs", import.meta.url).href;\nexport async function resolve(specifier, context, nextResolve) {\n  if (specifier === "open") return { url: STUB, shortCircuit: true, format: "module" };\n  return nextResolve(specifier, context);\n}\n`,
+      "utf8"
+    );
+  }
+  if (!existsSync(registerPath)) {
+    writeFileSync(
+      registerPath,
+      `import { register } from "node:module";\nregister("./loader.mjs", import.meta.url);\n`,
+      "utf8"
+    );
+  }
+  return registerPath;
+}
 
 /**
  * Build the env-var overrides that pin the Python interpreter when the user
@@ -195,6 +238,10 @@ export class AgentBridge {
     }
 
     const npx = process.platform === "win32" ? "npx.cmd" : "npx";
+    const registerHook = ensurePreviewNoOpenHook();
+    const registerHookUrl = pathToFileURL(registerHook).href;
+    // Preserve any existing NODE_OPTIONS — pnpm/corepack sometimes set them.
+    const existingNodeOptions = process.env.NODE_OPTIONS ?? "";
     const proc = spawn(npx, ["hyperframes", "preview", "--port", String(resolvedPort)], {
       cwd: workspacePath,
       stdio: ["ignore", "pipe", "pipe"],
@@ -206,6 +253,9 @@ export class AgentBridge {
       env: {
         ...process.env,
         BROWSER: "none",
+        // Suppress hyperframes' built-in `open(url)` call so we don't pop
+        // a browser window alongside the in-app PreviewPanel iframe.
+        NODE_OPTIONS: `${existingNodeOptions} --import="${registerHookUrl}"`.trim(),
         // Same Python pin we apply to the agent spawn — preview's bundler
         // can also shell out to Python for asset processing.
         ...applyPythonBin(pythonBin ?? null),
@@ -214,7 +264,8 @@ export class AgentBridge {
 
     this.previewProc = proc;
     this.previewWorkspace = workspacePath;
-    this.previewUrl = `http://localhost:${resolvedPort}`;
+    const localUrl = `http://localhost:${resolvedPort}`;
+    this.previewUrl = localUrl;
 
     proc.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
@@ -240,9 +291,20 @@ export class AgentBridge {
       this.previewWorkspace = null;
     });
     proc.on("exit", () => {
+      // Hyperframes' "already-running" branch prints status then exits even
+      // though the studio server (a prior instance) is still bound to the
+      // port. Don't null state on exit if the port is still answering — the
+      // iframe is happily talking to that older server. stopPreview() handles
+      // the explicit teardown path.
       this.previewProc = null;
-      this.previewUrl = null;
-      this.previewWorkspace = null;
+      void (async () => {
+        try {
+          await waitForPort(resolvedPort, 1500);
+        } catch {
+          this.previewUrl = null;
+          this.previewWorkspace = null;
+        }
+      })();
     });
 
     // Two-phase readiness probe — the TCP bind opens the port long before
@@ -254,7 +316,14 @@ export class AgentBridge {
     //      marker on stdout (the bundler is past first-pass build).
     // 60s budget covers a cold start where HyperFrames downloads its
     // bundled Chromium.
-    const readyMarker = waitForStdoutMarker(proc, /Studio (running|http)/i, 60000);
+    // Match either "Studio running" / "Studio  http://..." (fresh start) or
+    // "Already running" / "Reusing existing server" (port already held by an
+    // earlier hyperframes instance — that one stays up and we just attach).
+    const readyMarker = waitForStdoutMarker(
+      proc,
+      /(Studio\s+(running|http))|Already running|Reusing existing/i,
+      60000
+    );
     try {
       await Promise.all([waitForPort(resolvedPort, 60000), readyMarker]);
     } catch (err) {
@@ -268,7 +337,7 @@ export class AgentBridge {
       throw err;
     }
 
-    return { url: this.previewUrl };
+    return { url: localUrl };
   }
 
   async stopPreview(): Promise<void> {

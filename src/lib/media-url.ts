@@ -9,6 +9,9 @@
  */
 export function pathToMediaUrl(absolutePath: string): string {
   // Normalize Windows backslashes so the URL is consistent across platforms.
+  // Authority "local" gives the URL a proper host — empty-authority forms
+  // (`studio-media:///...`) have been observed to fail canonicalization in
+  // Chromium's URL parser, killing the request before the handler runs.
   const normalized = absolutePath.replace(/\\/g, "/");
-  return `studio-media:///${encodeURIComponent(normalized)}`;
+  return `studio-media://local/${encodeURIComponent(normalized)}`;
 }

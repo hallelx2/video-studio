@@ -41,7 +41,7 @@ interface PreviewContextValue {
   current: PreviewState | null;
   starting: string | null;
   /** Open a HyperFrames composition in the iframe variant of the panel. */
-  openIframe: (args: { workspace: string; aspect: string }) => Promise<void>;
+  openIframe: (args: { workspace: string; aspect: string }) => Promise<{ url: string }>;
   /** Open a rendered MP4 in the <video> variant of the panel. Sync — no
    *  subprocess to spawn for video playback. */
   openVideo: (args: { filePath: string; format: string }) => void;
@@ -63,7 +63,7 @@ const PreviewContext = createContext<PreviewContextValue | null>(null);
  */
 function mediaUrlFor(filePath: string): string {
   const normalized = filePath.replace(/\\/g, "/");
-  return `studio-media:///${encodeURIComponent(normalized)}`;
+  return `studio-media://local/${encodeURIComponent(normalized)}`;
 }
 
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
@@ -79,20 +79,29 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
   }, [current]);
 
   const openIframe = useCallback(
-    async ({ workspace, aspect }: { workspace: string; aspect: string }) => {
-      // Same iframe already running? No-op.
+    async ({
+      workspace,
+      aspect,
+    }: {
+      workspace: string;
+      aspect: string;
+    }): Promise<{ url: string }> => {
+      // Same iframe already running? Reuse the URL — startPreview is
+      // idempotent on identical workspace anyway, but skipping the IPC
+      // round-trip keeps the click instant.
       if (
         current?.kind === "iframe" &&
         current.workspace === workspace &&
         current.aspect === aspect
       ) {
-        return;
+        return { url: current.url };
       }
       await tearDown();
       setStarting(aspect);
       try {
         const { url } = await startPreview(workspace);
         setCurrent({ kind: "iframe", workspace, aspect, url });
+        return { url };
       } finally {
         setStarting(null);
       }
@@ -147,7 +156,7 @@ export function usePreview(): PreviewContextValue {
     return {
       current: null,
       starting: null,
-      openIframe: async () => undefined,
+      openIframe: async () => ({ url: "" }),
       openVideo: () => undefined,
       close: async () => undefined,
     };

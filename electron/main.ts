@@ -78,6 +78,38 @@ function createWindow(): void {
 
   agent.attachWindow(mainWindow);
 
+  // Keep all preview-iframe navigation inside the app. Without these,
+  // any `target="_blank"`, `window.open(...)`, or framebusting redirect
+  // inside the HyperFrames dev server (the iframe in PreviewPanel) gets
+  // forwarded to the OS default browser by Electron's defaults. The user
+  // expects the preview to stay in-app — these guards enforce that.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    // Genuine outbound links (docs, GitHub, etc.) — explicitly route
+    // through openExternal so the user still gets them in their browser.
+    // Localhost preview URLs and studio-media paths stay in-app.
+    if (
+      url.startsWith("http://localhost") ||
+      url.startsWith("http://127.0.0.1") ||
+      url.startsWith("studio-media:")
+    ) {
+      return { action: "deny" };
+    }
+    void shell.openExternal(url).catch(() => undefined);
+    return { action: "deny" };
+  });
+  mainWindow.webContents.on("will-navigate", (event, url) => {
+    // Top-level navigation away from the renderer is never wanted —
+    // we're a single-page app. Block it. (HMR uses the existing URL,
+    // which doesn't trigger will-navigate.)
+    if (isDev && VITE_DEV_SERVER_URL && url.startsWith(VITE_DEV_SERVER_URL)) {
+      return;
+    }
+    event.preventDefault();
+    if (url.startsWith("http")) {
+      void shell.openExternal(url).catch(() => undefined);
+    }
+  });
+
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
   });
@@ -142,35 +174,73 @@ const MEDIA_MIME: Record<string, string> = {
 
 function registerMediaProtocol(): void {
   protocol.handle("studio-media", async (request) => {
+    const method = request.method;
+    const rawUrl = request.url;
+    const range = request.headers.get("range");
+    let decoded = "";
     try {
-      const url = new URL(request.url);
-      const decoded = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      const url = new URL(rawUrl);
+      // Pathname is `/<encoded-absolute-path>`. Strip leading slash, decode.
+      // We tolerate both `studio-media:///<path>` (empty host, legacy) and
+      // `studio-media://local/<path>` (proper host) without branching.
+      decoded = decodeURIComponent(url.pathname.replace(/^\//, ""));
+      console.log(
+        `[studio-media] ${method} host=${url.host || "-"} range=${range ?? "-"} path=${decoded}`
+      );
       const stat = await fs.stat(decoded);
       if (!stat.isFile()) {
+        console.warn(`[studio-media] not-a-file: ${decoded}`);
         return new Response("not a file", { status: 404 });
       }
       const total = stat.size;
       const ext = extname(decoded).toLowerCase();
       const mime = MEDIA_MIME[ext] ?? "application/octet-stream";
 
+      // HEAD: respond with headers only, no body. Chromium's media stack
+      // sometimes preflights with HEAD; returning a body stream there has
+      // been observed to flatten into MEDIA_ERR_SRC_NOT_SUPPORTED.
+      if (method === "HEAD") {
+        console.log(`[studio-media] HEAD 200 size=${total} mime=${mime}`);
+        return new Response(null, {
+          status: 200,
+          headers: {
+            "Content-Type": mime,
+            "Content-Length": String(total),
+            "Accept-Ranges": "bytes",
+            "Cache-Control": "no-store",
+          },
+        });
+      }
+
       // Honor Range — Chromium's <video> sends `bytes=N-` for seeking.
       // Without 206 + Content-Range support, the player can't scrub.
-      const range = request.headers.get("range");
       if (range) {
         const match = /^bytes=(\d+)-(\d*)$/.exec(range.trim());
         if (match) {
           const start = parseInt(match[1], 10);
           const end = match[2] ? Math.min(parseInt(match[2], 10), total - 1) : total - 1;
           if (start >= total || start > end) {
+            console.warn(
+              `[studio-media] 416 start=${start} end=${end} total=${total}`
+            );
             return new Response("range not satisfiable", {
               status: 416,
               headers: { "Content-Range": `bytes */${total}` },
             });
           }
           const length = end - start + 1;
+          const nodeStream = createReadStream(decoded, { start, end });
+          nodeStream.on("error", (err) => {
+            console.error(
+              `[studio-media] stream error (range) path=${decoded} ${(err as Error).message}`
+            );
+          });
           const stream = Readable.toWeb(
-            createReadStream(decoded, { start, end })
+            nodeStream
           ) as unknown as ReadableStream<Uint8Array>;
+          console.log(
+            `[studio-media] 206 ${start}-${end}/${total} length=${length}`
+          );
           return new Response(stream, {
             status: 206,
             headers: {
@@ -184,9 +254,16 @@ function registerMediaProtocol(): void {
         }
       }
 
+      const nodeStream = createReadStream(decoded);
+      nodeStream.on("error", (err) => {
+        console.error(
+          `[studio-media] stream error (full) path=${decoded} ${(err as Error).message}`
+        );
+      });
       const stream = Readable.toWeb(
-        createReadStream(decoded)
+        nodeStream
       ) as unknown as ReadableStream<Uint8Array>;
+      console.log(`[studio-media] 200 size=${total} mime=${mime}`);
       return new Response(stream, {
         status: 200,
         headers: {
@@ -197,7 +274,11 @@ function registerMediaProtocol(): void {
         },
       });
     } catch (err) {
-      return new Response(`media error: ${(err as Error).message}`, {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[studio-media] handler threw url=${rawUrl} decoded=${decoded} :: ${msg}`
+      );
+      return new Response(`media error: ${msg}`, {
         status: err instanceof Error && err.message.includes("ENOENT") ? 404 : 500,
       });
     }
@@ -295,6 +376,110 @@ function registerIpcHandlers(): void {
   ipcMain.handle("agent:cancel", async () => agent.cancel());
 
   ipcMain.handle("agent:is-running", async () => agent.isRunning());
+
+  // Wipe cached artifacts for a pipeline stage so the resume detector treats
+  // it (and everything downstream) as not-done. Used by the chat slash
+  // commands /renarrate, /recompose, /rerender, /redraft so the user can
+  // retry a single stage without manually deleting files. Cascade rules
+  // mirror detectResume() in agent/src/tasks/generate-video.ts:
+  //
+  //   redraft   → script.json + manifest + narration WAVs + compositions + outputs
+  //   renarrate → manifest + narration WAVs/hashes + per-aspect narration + outputs
+  //   recompose → per-aspect index.html + outputs
+  //   rerender  → outputs only
+  //
+  // Returns the list of files actually removed so the renderer can show a
+  // toast / agent_log entry confirming the wipe.
+  ipcMain.handle(
+    "agent:invalidate-stage",
+    async (
+      _,
+      projectId: string,
+      stage: "redraft" | "renarrate" | "recompose" | "rerender"
+    ): Promise<{ removed: string[] }> => {
+      if (
+        !projectId ||
+        projectId.includes("/") ||
+        projectId.includes("\\") ||
+        projectId.includes("..")
+      ) {
+        throw new Error(`Invalid projectId: ${projectId}`);
+      }
+      const config = await loadConfig();
+      const workspaceRoot =
+        config.workspacePath ?? join(app.getPath("userData"), "workspace");
+      const projectWs = join(workspaceRoot, projectId);
+
+      const removed: string[] = [];
+      const tryRm = async (path: string): Promise<void> => {
+        try {
+          await fs.rm(path, { recursive: true, force: true });
+          removed.push(path);
+        } catch {
+          // best-effort: not-found / locked is fine
+        }
+      };
+      const tryRmGlob = async (
+        dir: string,
+        predicate: (name: string) => boolean
+      ): Promise<void> => {
+        let entries: string[] = [];
+        try {
+          entries = await fs.readdir(dir);
+        } catch {
+          return;
+        }
+        await Promise.all(
+          entries.filter(predicate).map((name) => tryRm(join(dir, name)))
+        );
+      };
+
+      // Outputs are always cleared — every stage produces them last.
+      const outputDir = join(projectWs, "output");
+      await tryRmGlob(outputDir, (n) => /\.(mp4|webm|mov)$/i.test(n));
+
+      // List aspect dirs (1080x1080, 1920x1080, 1080x1920, …) so we can wipe
+      // per-aspect artifacts uniformly. They're the only top-level dirs that
+      // match WxH.
+      let entries: string[] = [];
+      try {
+        entries = await fs.readdir(projectWs);
+      } catch {
+        // Workspace doesn't exist yet — nothing to do, return empty list.
+        return { removed };
+      }
+      const aspectDirs = entries.filter((n) => /^\d+x\d+$/.test(n));
+
+      if (stage === "rerender") {
+        // outputs already cleared above
+        return { removed };
+      }
+
+      if (stage === "recompose" || stage === "renarrate" || stage === "redraft") {
+        for (const aspect of aspectDirs) {
+          await tryRm(join(projectWs, aspect, "index.html"));
+        }
+      }
+
+      if (stage === "renarrate" || stage === "redraft") {
+        await tryRm(join(projectWs, "manifest.json"));
+        const narrationDir = join(projectWs, "narration");
+        await tryRmGlob(narrationDir, (n) => /\.(wav|hash)$/i.test(n));
+        for (const aspect of aspectDirs) {
+          await tryRmGlob(
+            join(projectWs, aspect, "narration"),
+            (n) => /\.(wav|hash)$/i.test(n)
+          );
+        }
+      }
+
+      if (stage === "redraft") {
+        await tryRm(join(projectWs, "script.json"));
+      }
+
+      return { removed };
+    }
+  );
 
   ipcMain.handle("fs:read-text", async (_, path: string) => {
     try {
