@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.2](https://github.com/hallelx2/video-studio/compare/v0.1.1...v0.1.2) (2026-04-28)
+
+
+### Features
+
+* **updater:** wire GitHub-backed auto-update via electron-updater ([6e7a69e](https://github.com/hallelx2/video-studio/commit/6e7a69e00c339e980274a0e102e11fdf00848b6a))
+
+
+### Bug Fixes
+
+* **docs+ci:** inline-playable demo video + correct TTS attribution + working release-build ([ce3455a](https://github.com/hallelx2/video-studio/commit/ce3455a7557c225e2fc96381d36becdcb5ed7178))
+
+
+### Documentation
+
+* embed 2-minute demo walkthrough in README ([68ba89a](https://github.com/hallelx2/video-studio/commit/68ba89a3d80c56a60e884a8c4454341ee2a5220d))
+* hoist demo video into hero, fix release-build artifact path ([dfa8f19](https://github.com/hallelx2/video-studio/commit/dfa8f191e94e8d3f303f828657eeba7be808106a))
+* switch hero demo to GIF so it plays inline ([7654695](https://github.com/hallelx2/video-studio/commit/765469522ee169b177fddc59a68c504522339fd2))
+
 ## [0.1.1](https://github.com/hallelx2/video-studio/compare/v0.1.0...v0.1.1) (2026-04-28)
 
 
