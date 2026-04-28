@@ -605,25 +605,23 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
     }
   }
 
-  // Mid-run sweep: a running tool call is also stale if a LATER tool call
-  // (or the agent's next text/result) exists in the timeline — the agent
-  // can only emit those after the prior tool returned. Mark the predecessor
-  // complete so "Running… 171s" doesn't linger on a tool the agent has
-  // already moved past.
-  let lastSettledIdx = -1;
+  // Mid-run sweep: any tool call with ANOTHER tool activity at a higher
+  // index is stale — the SDK serializes tools within a turn, so the agent
+  // can only have emitted the next tool after the prior one returned. Same
+  // logic for text / user activities, which can only land after the
+  // currently-running tool settled. Without this, mkdir runs for 1ms but
+  // its row sticks at "Running… 156s" because the next tool happens to
+  // also still be running.
+  let lastBoundaryIdx = -1;
   for (let i = state.activities.length - 1; i >= 0; i--) {
     const a = state.activities[i];
-    if (a.kind === "tool" && a.status !== "running") {
-      lastSettledIdx = i;
-      break;
-    }
-    if (a.kind === "text" || a.kind === "user") {
-      lastSettledIdx = i;
+    if (a.kind === "tool" || a.kind === "text" || a.kind === "user") {
+      lastBoundaryIdx = i;
       break;
     }
   }
-  if (lastSettledIdx >= 0) {
-    for (let i = 0; i < lastSettledIdx; i++) {
+  if (lastBoundaryIdx > 0) {
+    for (let i = 0; i < lastBoundaryIdx; i++) {
       const a = state.activities[i];
       if (a.kind === "tool" && a.status === "running") {
         a.status = "complete";
