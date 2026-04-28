@@ -452,7 +452,19 @@ export class AgentBridge {
    * Awaitable so callers can immediately spawn a replacement run.
    */
   async cancel(): Promise<void> {
-    if (!this.proc) return;
+    if (!this.proc) {
+      // No live process to kill — but the renderer's derived agent state
+      // may still show "running" because no terminal event was ever
+      // emitted (e.g. agent died silently while parked at an approval
+      // gate). Synthesize a needs_input result so the timeline transitions
+      // out of "running" and the Stop button visibly resolves the run.
+      this.emit({
+        type: "result",
+        status: "needs_input",
+        message: "Stopped — send a new message to start a fresh run.",
+      });
+      return;
+    }
     const proc = this.proc;
 
     return new Promise<void>((resolve) => {
