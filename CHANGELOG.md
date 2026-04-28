@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/hallelx2/video-studio/compare/v0.1.2...v0.1.3) (2026-04-28)
+
+
+### Bug Fixes
+
+* **packaging:** drop {type:commonjs} into electron/dist so packaged asar runs ([ff588a9](https://github.com/hallelx2/video-studio/commit/ff588a959e0cb71157b0851c412002a47462ee16))
+
 ## [0.1.2](https://github.com/hallelx2/video-studio/compare/v0.1.1...v0.1.2) (2026-04-28)
 
 
