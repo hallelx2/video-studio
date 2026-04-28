@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/hallelx2/video-studio/compare/v0.1.4...v0.1.5) (2026-04-28)
+
+
+### Bug Fixes
+
+* **agent:** script regen on videoType change + surface real TTS error ([1ca6a60](https://github.com/hallelx2/video-studio/commit/1ca6a601a61fbc2115be239ce4cc04e4c13d5bcf))
+
 ## [0.1.4](https://github.com/hallelx2/video-studio/compare/v0.1.3...v0.1.4) (2026-04-28)
 
 
