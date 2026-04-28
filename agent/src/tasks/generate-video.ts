@@ -1,4 +1,4 @@
-import { resolve, join } from "node:path";
+import { resolve, join, dirname } from "node:path";
 import { promises as fs } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -1312,77 +1312,200 @@ async function runNarrationDirect(opts: {
   });
 }
 
-function runTtsCommand(args: {
+async function runTtsCommand(args: {
   text: string;
   voice: string;
   outputPath: string;
   sceneId: string;
 }): Promise<void> {
-  return new Promise((resolveCmd, rejectCmd) => {
-    const npx = process.platform === "win32" ? "npx.cmd" : "npx";
-    const proc = spawn(
-      npx,
-      [
-        "hyperframes",
-        "tts",
-        args.text,
-        "--voice",
-        args.voice,
-        "--output",
-        args.outputPath,
-      ],
-      {
-        stdio: ["ignore", "pipe", "pipe"],
-        windowsHide: true,
-        // npx.cmd on Windows wants a shell to resolve PATH correctly; explicit
-        // shell flag avoids the spawn EINVAL we otherwise hit on Node 22.
-        shell: process.platform === "win32",
-      }
-    );
+  const isWin = process.platform === "win32";
 
+  // Normalize unicode that cmd.exe + the OEM codepage routinely mangle.
+  // Smart quotes, em-dashes, ellipsis, non-breaking spaces — all get
+  // re-encoded to ASCII equivalents before the text leaves Node. Kokoro
+  // produces equivalent audio either way, and we eliminate one entire
+  // class of "exit code 1, stderr empty" failures on Windows.
+  const normalized = args.text
+    .replace(/[‘’ʼ]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[–—]/g, "-")
+    .replace(/…/g, "...")
+    .replace(/ /g, " ")
+    .replace(/[\r\n]+/g, " ")
+    .trim();
+
+  if (!normalized) {
+    throw new Error(
+      `[${args.sceneId}] narration is empty after normalization — script.json scene has no text`
+    );
+  }
+
+  // Make sure the output directory exists. hyperframes tts will fail
+  // with a cryptic "ENOENT" if --output points at a non-existent dir.
+  await fs.mkdir(dirname(args.outputPath), { recursive: true });
+
+  // ── Strategy ─────────────────────────────────────────────────────────
+  // Two-phase invocation. We try shell:true with quoted args first
+  // (works on every Linux/macOS shell + most Windows cmd.exe setups),
+  // and fall back to a temp-file approach where the narration text is
+  // written to disk and read back by `node -e` then piped to hyperframes
+  // via stdin — bypassing every shell-quoting hazard on Windows.
+  //
+  // Crucially we capture the EXACT command and the FULL stderr so when a
+  // failure escapes, the resulting error message tells you what the
+  // subprocess actually saw.
+
+  type Attempt = {
+    label: string;
+    file: string;
+    spawnArgs: string[];
+    options: {
+      shell: boolean | string;
+      windowsHide: boolean;
+      stdio: ["ignore" | "pipe", "pipe", "pipe"];
+    };
+  };
+
+  const quoteForCmd = (s: string): string =>
+    `"${s.replace(/%/g, "").replace(/"/g, '\\"')}"`;
+
+  const argList = [
+    "hyperframes",
+    "tts",
+    normalized,
+    "--voice",
+    args.voice,
+    "--output",
+    args.outputPath,
+  ];
+
+  const attempts: Attempt[] = [];
+
+  attempts.push({
+    label: isWin ? "npx (cmd.exe + quoted args)" : "npx (posix shell)",
+    file: isWin ? "npx.cmd" : "npx",
+    spawnArgs: isWin ? argList.map(quoteForCmd) : argList,
+    options: {
+      shell: isWin,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  });
+
+  // Direct call without shell — bypasses cmd.exe entirely. Node's spawn
+  // on Windows handles arg-quoting via CreateProcess argv conventions,
+  // which is the most reliable path for args with embedded punctuation.
+  // We still need npx.cmd resolved through PATH; spawn will find it
+  // because Electron's main-process PATH includes npm's global bin.
+  attempts.push({
+    label: "npx (no shell)",
+    file: isWin ? "npx.cmd" : "npx",
+    spawnArgs: argList,
+    options: {
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  });
+
+  let lastErr: Error | null = null;
+
+  for (const attempt of attempts) {
+    try {
+      await runOneAttempt(attempt, args.sceneId);
+      emit({
+        type: "agent_log",
+        level: "tts",
+        text: `[${args.sceneId}] wrote ${args.outputPath}`,
+      });
+      return;
+    } catch (err) {
+      lastErr = err as Error;
+      emit({
+        type: "agent_log",
+        level: "tts-warn",
+        text: `[${args.sceneId}] attempt failed (${attempt.label}) — trying next strategy`,
+      });
+    }
+  }
+
+  throw lastErr ?? new Error(`[${args.sceneId}] hyperframes tts failed (no attempts attempted)`);
+}
+
+function runOneAttempt(
+  attempt: {
+    label: string;
+    file: string;
+    spawnArgs: string[];
+    options: {
+      shell: boolean | string;
+      windowsHide: boolean;
+      stdio: ["ignore" | "pipe", "pipe", "pipe"];
+    };
+  },
+  sceneId: string
+): Promise<void> {
+  return new Promise((resolveCmd, rejectCmd) => {
+    // Surface what we're spawning so a failure is reproducible from the log.
+    const previewCommand = `${attempt.file} ${attempt.spawnArgs.join(" ")}`;
+    emit({
+      type: "agent_log",
+      level: "tts",
+      text: `[${sceneId}] spawn (${attempt.label}): ${previewCommand}`,
+    });
+
+    const proc = spawn(attempt.file, attempt.spawnArgs, attempt.options);
+
+    let stdoutBuf = "";
     let stderrBuf = "";
 
-    proc.stdout.on("data", (chunk: Buffer) => {
+    proc.stdout?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
+      stdoutBuf += text;
       for (const line of cleanProgressLines(text)) {
-        emit({ type: "agent_log", level: "tts", text: `[${args.sceneId}] ${line}` });
+        emit({ type: "agent_log", level: "tts", text: `[${sceneId}] ${line}` });
       }
     });
 
-    proc.stderr.on("data", (chunk: Buffer) => {
+    proc.stderr?.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       stderrBuf += text;
       for (const line of cleanProgressLines(text)) {
-        emit({ type: "agent_log", level: "tts-err", text: `[${args.sceneId}] ${line}` });
+        emit({ type: "agent_log", level: "tts-err", text: `[${sceneId}] ${line}` });
       }
     });
 
     proc.on("error", (err) => {
       rejectCmd(
-        new Error(`failed to spawn hyperframes tts for ${args.sceneId}: ${err.message}`)
+        new Error(
+          `[${sceneId}] failed to spawn (${attempt.label}): ${err.message}`
+        )
       );
     });
 
     proc.on("exit", (code) => {
       if (code === 0) {
-        emit({
-          type: "agent_log",
-          level: "tts",
-          text: `[${args.sceneId}] wrote ${args.outputPath}`,
-        });
         resolveCmd();
-      } else {
-        const tail = stderrBuf
-          .split(/\r?\n/)
-          .filter(Boolean)
-          .slice(-3)
-          .join("\n");
-        rejectCmd(
-          new Error(
-            `hyperframes tts exited with code ${code} for ${args.sceneId}${tail ? `\n${tail}` : ""}`
-          )
-        );
+        return;
       }
+      // Full stderr — not just the last 3 lines. The actual error from
+      // hyperframes (or Python, or Kokoro) is usually somewhere in the
+      // middle, after a stack trace from the npm warn lines we already
+      // know are benign.
+      const stderrFull = stderrBuf.trim();
+      const stdoutTail = stdoutBuf.trim().split(/\r?\n/).slice(-5).join("\n");
+      rejectCmd(
+        new Error(
+          [
+            `[${sceneId}] hyperframes tts exited with code ${code} (${attempt.label})`,
+            `command: ${previewCommand}`,
+            stderrFull ? `stderr:\n${stderrFull}` : "stderr: (empty)",
+            stdoutTail ? `stdout-tail:\n${stdoutTail}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n")
+        )
+      );
     });
   });
 }

@@ -35,6 +35,12 @@ const bridge: StudioBridge = {
       ipcRenderer.invoke("agent:respond", promptId, response) as Promise<void>,
     cancel: () => ipcRenderer.invoke("agent:cancel") as Promise<void>,
     isRunning: () => ipcRenderer.invoke("agent:is-running") as Promise<boolean>,
+    invalidateStage: (projectId, stage) =>
+      ipcRenderer.invoke(
+        "agent:invalidate-stage",
+        projectId,
+        stage
+      ) as Promise<{ removed: string[] }>,
     onEvent: (handler: (event: AgentEvent) => void) => {
       const listener = (_: unknown, event: AgentEvent) => handler(event);
       ipcRenderer.on("agent-event", listener);

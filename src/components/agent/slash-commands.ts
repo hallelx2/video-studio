@@ -29,6 +29,12 @@ export interface CommandHandlers {
   onCancel: () => void;
   onPreview: () => void;
   onSwitchModel: (modelHint: string) => void;
+  /**
+   * Stage-retry: wipe cached artifacts from a given pipeline stage onward
+   * and re-run the build with the same brief. Cascade depth: redraft >
+   * renarrate > recompose > rerender (each implies everything to its right).
+   */
+  onRetryStage: (stage: "redraft" | "renarrate" | "recompose" | "rerender") => void;
 }
 
 export interface SlashCommand {
@@ -97,6 +103,52 @@ export const SLASH_COMMANDS: SlashCommand[] = [
     name: "model",
     description: "Switch the active Claude model · /model opus, /model sonnet, /model haiku",
     execute: (args, _ctx, h) => h.onSwitchModel(args.trim().toLowerCase()),
+  },
+  // Retry-from-stage commands. Only relevant after a complete run (or one
+  // that errored late) — hidden while the agent is mid-flight, since that
+  // would race the resume detector.
+  {
+    name: "rerender",
+    description: "Re-run only the render stage (keeps script + narration + composition)",
+    hint: "stage 6",
+    visible: (ctx) =>
+      ctx.hasHistory &&
+      ctx.status !== "running" &&
+      ctx.status !== "awaiting_input",
+    execute: (_args, _ctx, h) => h.onRetryStage("rerender"),
+  },
+  {
+    name: "recompose",
+    aliases: ["rebuild"],
+    description: "Re-author the HyperFrames composition + re-render (keeps script + narration)",
+    hint: "stage 5+",
+    visible: (ctx) =>
+      ctx.hasHistory &&
+      ctx.status !== "running" &&
+      ctx.status !== "awaiting_input",
+    execute: (_args, _ctx, h) => h.onRetryStage("recompose"),
+  },
+  {
+    name: "renarrate",
+    aliases: ["retts", "reaudio"],
+    description: "Regenerate narration WAVs (TTS) and re-render (keeps script)",
+    hint: "stage 4+",
+    visible: (ctx) =>
+      ctx.hasHistory &&
+      ctx.status !== "running" &&
+      ctx.status !== "awaiting_input",
+    execute: (_args, _ctx, h) => h.onRetryStage("renarrate"),
+  },
+  {
+    name: "redraft",
+    aliases: ["rescript"],
+    description: "Re-draft the script and rebuild everything from scratch",
+    hint: "stage 3+",
+    visible: (ctx) =>
+      ctx.hasHistory &&
+      ctx.status !== "running" &&
+      ctx.status !== "awaiting_input",
+    execute: (_args, _ctx, h) => h.onRetryStage("redraft"),
   },
 ];
 

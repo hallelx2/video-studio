@@ -50,6 +50,13 @@ export async function isAgentRunning(): Promise<boolean> {
   return studio().agent.isRunning();
 }
 
+export async function invalidateStage(
+  projectId: string,
+  stage: "redraft" | "renarrate" | "recompose" | "rerender"
+): Promise<{ removed: string[] }> {
+  return studio().agent.invalidateStage(projectId, stage);
+}
+
 export async function getConfig(): Promise<AppConfig> {
   return studio().config.get();
 }

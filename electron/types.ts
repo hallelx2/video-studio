@@ -422,6 +422,19 @@ export interface StudioBridge {
     isRunning(): Promise<boolean>;
     /** Returns an unsubscribe function. */
     onEvent(handler: (event: AgentEvent) => void): () => void;
+    /**
+     * Wipe cached pipeline artifacts for a stage so the next agent run
+     * regenerates from that point. Cascades downstream:
+     *   redraft   — script + narration + compositions + outputs
+     *   renarrate — narration + compositions + outputs
+     *   recompose — compositions + outputs
+     *   rerender  — outputs only
+     * Returns the file paths actually removed.
+     */
+    invalidateStage(
+      projectId: string,
+      stage: "redraft" | "renarrate" | "recompose" | "rerender"
+    ): Promise<{ removed: string[] }>;
   };
   fs: {
     /** Read a UTF-8 text file. Returns null if the file doesn't exist. */
