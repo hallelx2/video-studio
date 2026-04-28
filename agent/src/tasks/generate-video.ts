@@ -5,6 +5,68 @@ import { createHash } from "node:crypto";
 import { runAgent } from "../claude.js";
 import { emit } from "../index.js";
 
+// ─── Subprocess output cleanup ────────────────────────────────────────────
+// Kokoro / hyperframes-tts use tqdm-style progress bars that emit bare \r
+// to overwrite the line in place. Without honoring CR, every partial state
+// gets concatenated into a single garbage line full of unicode block-
+// drawing characters that don't render in the chat font (showing as tofu
+// boxes). Keep only the LAST CR-segment of each line and drop pure progress
+// frames (`50%|████ |50/100 [00:01<00:01, 50it/s]` and friends) so the
+// terminal pane reads as actual log output instead of a bar dump.
+const TQDM_PROGRESS_RE =
+  /^\s*\d{1,3}%?\s*\|.*\|\s*\d+\/?\d*\s*(\[[^\]]*\])?\s*$/;
+const ONLY_BLOCK_CHARS_RE = /^[▀-▟\s|0-9%/.\[\]:,<>?\-]+$/;
+
+function cleanProgressLines(text: string): string[] {
+  const out: string[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    if (!rawLine) continue;
+    // Honor bare-CR overwrites — only the final segment was meant to be visible.
+    const segments = rawLine.split("\r");
+    const last = segments[segments.length - 1].trimEnd();
+    if (!last) continue;
+    if (TQDM_PROGRESS_RE.test(last)) continue;
+    if (ONLY_BLOCK_CHARS_RE.test(last)) continue;
+    out.push(last);
+  }
+  return out;
+}
+
+// ─── Natural-language approval classifier ─────────────────────────────────
+// Approval gates accept a primary verb ("approve", "render") plus a free-
+// text channel for revision notes. Without natural-language matching, a
+// reasonable user response like "you can continue" or "yes go ahead" gets
+// silently treated as revision notes — the agent regenerates instead of
+// proceeding. This classifier maps common affirmatives → approve and
+// negatives → cancel, so the gates feel like a chat instead of a CLI flag.
+type ApprovalIntent = "approve" | "cancel" | "revise";
+
+const AFFIRMATIVE_RE =
+  /^(y|yes|yep|yeah|yup|ok|okay|sure|fine|good|great|perfect|sounds good|looks good|lgtm|ship it|ship|go|go ahead|proceed|continue|you can continue|do it|approve|approved|accept|accepted)\.?!?$/i;
+
+const NEGATIVE_RE =
+  /^(n|no|nope|nah|stop|abort|kill|cancel|cancelled|cancelled\.|forget it)\.?!?$/i;
+
+/**
+ * Classify a free-text response from an approval gate.
+ *
+ * @param response   The raw string the user submitted.
+ * @param verbs      Gate-specific approval verbs (e.g. ["approve"] or
+ *                   ["render"]). Matched literally before the regex so the
+ *                   button-click path is fast and unambiguous.
+ */
+function classifyApproval(
+  response: string,
+  verbs: readonly string[]
+): ApprovalIntent {
+  const t = response.trim().toLowerCase();
+  if (!t) return "cancel";
+  if (verbs.includes(t)) return "approve";
+  if (AFFIRMATIVE_RE.test(t)) return "approve";
+  if (NEGATIVE_RE.test(t)) return "cancel";
+  return "revise";
+}
+
 export interface GenerateVideoOptions {
   projectId: string;
   videoType: string;
@@ -281,8 +343,9 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     );
 
     const trimmed = response.trim();
+    const intent = classifyApproval(trimmed, ["approve"]);
 
-    if (trimmed === "cancel" || trimmed === "") {
+    if (intent === "cancel") {
       // Cancel clears the approval file too — next run starts fresh.
       await clearApprovalState(approvalPath).catch(() => undefined);
       emit({
@@ -293,7 +356,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       return;
     }
 
-    if (trimmed === "approve") {
+    if (intent === "approve") {
       approved = true;
       const fresh = await hashFileIfExists(scriptPath);
       await writeApprovalState(approvalPath, {
@@ -481,8 +544,9 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     );
 
     const composeTrimmed = composeResponse.trim();
+    const composeIntent = classifyApproval(composeTrimmed, ["render"]);
 
-    if (composeTrimmed === "cancel" || composeTrimmed === "") {
+    if (composeIntent === "cancel") {
       // Cancel clears the compose-side approval but leaves script approval
       // intact — the user can revise the composition without re-OK-ing
       // the same script next time.
@@ -499,7 +563,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       return;
     }
 
-    if (composeTrimmed === "render") {
+    if (composeIntent === "approve") {
       composeApproved = true;
       const fresh = await hashCompositionsIfExist(compositions);
       const beforeRender = await readApprovalState(approvalPath);
@@ -1160,7 +1224,7 @@ function runTtsCommand(args: {
 
     proc.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
-      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+      for (const line of cleanProgressLines(text)) {
         emit({ type: "agent_log", level: "tts", text: `[${args.sceneId}] ${line}` });
       }
     });
@@ -1168,7 +1232,7 @@ function runTtsCommand(args: {
     proc.stderr.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       stderrBuf += text;
-      for (const line of text.split(/\r?\n/).filter(Boolean)) {
+      for (const line of cleanProgressLines(text)) {
         emit({ type: "agent_log", level: "tts-err", text: `[${args.sceneId}] ${line}` });
       }
     });
