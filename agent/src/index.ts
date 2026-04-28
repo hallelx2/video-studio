@@ -24,6 +24,29 @@ interface PromptResponseMessage {
 // The stdin reader resolves it when a matching {type:"prompt-response"} arrives.
 const pending = new Map<string, (response: string) => void>();
 
+// ─── Keep-alive while awaiting user input ─────────────────────────────────
+// On Windows + ELECTRON_RUN_AS_NODE, after the Claude CLI subprocess exits
+// the event loop can drain even with `process.stdin.on("data")` registered,
+// causing the agent process to exit cleanly mid-approval. The result is the
+// host sees `proc === null` when the user finally responds and emits
+// "agent had already exited when this response arrived". A no-op interval
+// keeps at least one ref'd handle alive while a prompt is in flight, then
+// gets cleared as soon as everything resolves so we still exit cleanly
+// after a normal run.
+let keepalive: NodeJS.Timeout | null = null;
+function ensureKeepalive(): void {
+  if (keepalive) return;
+  keepalive = setInterval(() => {
+    /* heartbeat — pin the event loop while a prompt is parked */
+  }, 30_000);
+}
+function releaseKeepaliveIfIdle(): void {
+  if (pending.size === 0 && keepalive) {
+    clearInterval(keepalive);
+    keepalive = null;
+  }
+}
+
 /** Emit a prompt event to the host and resolve when the user responds. */
 export function askUser(
   question: string,
@@ -32,6 +55,7 @@ export function askUser(
 ): Promise<string> {
   const id = `prompt-${Date.now()}-${Math.floor(Math.random() * 1e6).toString(36)}`;
   emit({ type: "prompt", id, question, options, payload: payload ?? {} });
+  ensureKeepalive();
   return new Promise<string>((resolve) => {
     pending.set(id, resolve);
   });
@@ -42,6 +66,9 @@ export function askUser(
 function setupStdin(): void {
   let buffer = "";
   process.stdin.setEncoding("utf8");
+  // Force flowing mode + keep the stream ref'd. Belt-and-suspenders against
+  // the Windows event-loop drain that causes mid-approval exits.
+  process.stdin.resume();
   process.stdin.on("data", (chunk: string) => {
     buffer += chunk;
     let idx: number;
@@ -55,6 +82,7 @@ function setupStdin(): void {
           const resolver = pending.get(msg.id);
           if (resolver) {
             pending.delete(msg.id);
+            releaseKeepaliveIfIdle();
             resolver(msg.response);
           }
         }
