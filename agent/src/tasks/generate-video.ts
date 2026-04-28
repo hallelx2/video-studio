@@ -1579,23 +1579,29 @@ function stageSixPrompt(args: {
   const lines = [
     `STAGE 6 — Render.`,
     ``,
-    `For each format, render the matching aspect:`,
+    `IMPORTANT: HyperFrames' default render settings produce an MP4 that the in-app Chromium <video> player frequently rejects (yuv444p pixel format, or a high H.264 profile / H.265 codec that browsers don't decode). To keep the in-app player working, render to a *.raw.mp4 first, then transcode with ffmpeg to a strictly browser-safe profile (H.264 baseline, yuv420p, AAC audio, +faststart). The transcode is fast — it only re-encodes if needed.`,
+    ``,
+    `For each format, run BOTH commands in sequence (do not skip the ffmpeg step):`,
     ``,
   ];
   for (const format of args.formats) {
     const aspect = aspectFor(format);
+    const rawPath = `${outputBase}/${format}.raw.mp4`;
+    const finalPath = `${outputBase}/${format}.mp4`;
     lines.push(
-      `  cd ${args.projectWorkspacePath}/${aspect} && npx hyperframes render --output ${outputBase}/${format}.mp4 --quality ${quality} --fps ${fps}`
+      `  cd ${args.projectWorkspacePath}/${aspect} && npx hyperframes render --output ${rawPath} --quality ${quality} --fps ${fps}`,
+      `  ffmpeg -y -i ${rawPath} -c:v libx264 -profile:v high -level 4.0 -pix_fmt yuv420p -preset fast -crf 20 -movflags +faststart -c:a aac -b:a 192k ${finalPath} && rm -f ${rawPath}`,
+      ``
     );
   }
   lines.push(
-    ``,
     `Render quality: ${quality} (override via Settings → Render preferences).`,
     `Render fps: ${fps}.`,
     `Output directory: ${outputBase}.`,
     ``,
     `Emit a progress message after each render completes, including the final file size and duration.`,
-    `If a render fails, emit an error event and continue with the remaining formats — don't abort the run.`
+    `If a render fails, emit an error event and continue with the remaining formats — don't abort the run.`,
+    `If ffmpeg is missing, hyperframes ships its own at \`npx hyperframes ffmpeg\` — fall back to that with the same arguments.`
   );
   return lines.join("\n");
 }
