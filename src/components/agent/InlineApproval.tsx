@@ -4,6 +4,8 @@ import type { PendingPrompt } from "../../lib/agent-state.js";
 import {
   openExternal,
   readText,
+  startPreview,
+  stopPreview,
   writeText,
 } from "../../lib/agent-client.js";
 import { usePreview } from "../../lib/preview-context.js";
@@ -143,8 +145,8 @@ export function InlineApproval({
       className={cn(
         "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
         submitting
-          ? "border-l-brass bg-brass/[0.04] opacity-75 pointer-events-none"
-          : "border-l-cinnabar bg-cinnabar/[0.03]"
+          ? "border-l-mist-10 bg-fg-faint/[0.04] opacity-75 pointer-events-none"
+          : "border-l-cyan bg-cyan/[0.03]"
       )}
       aria-busy={submitting}
     >
@@ -152,14 +154,14 @@ export function InlineApproval({
         <div className="flex items-baseline gap-3">
           <span
             className={cn(
-              "pulse-cinnabar h-1 w-1 self-center rounded-full",
-              submitting ? "bg-brass" : "bg-cinnabar"
+              "pulse-cyan h-1 w-1 self-center rounded-full",
+              submitting ? "bg-fg-faint" : "bg-cyan"
             )}
           />
           <span
             className={cn(
               "font-mono text-[10px] uppercase tracking-widest",
-              submitting ? "text-brass" : "text-cinnabar"
+              submitting ? "text-fg-faint" : "text-cyan"
             )}
           >
             {submitting
@@ -169,33 +171,33 @@ export function InlineApproval({
                 : "agent paused"}
           </span>
           {revision !== undefined && revision > 0 && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-faint">
               revision {revision}
             </span>
           )}
           {hasEdits && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-faint">
               {editCount} edited
             </span>
           )}
         </div>
         {isScriptApproval && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-            <span className="tabular text-paper">{scenes.length}</span> scenes
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+            <span className="tabular text-fg">{scenes.length}</span> scenes
             {total ? (
               <>
                 {" · "}
-                <span className="tabular text-paper">≈ {total.toFixed(1)}s</span>
+                <span className="tabular text-fg">≈ {total.toFixed(1)}s</span>
               </>
             ) : null}
           </span>
         )}
       </header>
 
-      <h3 className="display-sm mt-2 text-xl text-paper">{prompt.question}</h3>
+      <h3 className="display-sm mt-2 text-xl text-fg">{prompt.question}</h3>
 
       {isScriptApproval && (
-        <ol className="mt-4 max-h-[50vh] overflow-y-auto stagger-children divide-y divide-brass-line/40">
+        <ol className="mt-4 max-h-[50vh] overflow-y-auto stagger-children divide-y divide-mist-10/40">
           {scenes.map((scene, i) => (
             <SceneRow
               key={scene.id}
@@ -209,7 +211,7 @@ export function InlineApproval({
       )}
 
       <footer className="mt-4 flex items-center justify-end gap-8">
-        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
           {submitting
             ? "approved — waiting for the next stage to start…"
             : hasEdits
@@ -226,8 +228,8 @@ export function InlineApproval({
                 className={cn(
                   "border-b pb-1 text-sm font-medium transition-colors",
                   submitting
-                    ? "cursor-not-allowed border-brass/40 text-brass"
-                    : "border-cinnabar text-cinnabar hover:text-paper"
+                    ? "cursor-not-allowed border-mist-10/40 text-fg-faint"
+                    : "border-cyan text-cyan hover:text-fg"
                 )}
               >
                 {submitting ? "approving…" : hasEdits ? "save & approve →" : "approve →"}
@@ -269,25 +271,25 @@ function SceneRow({
     <li className="py-3 first:pt-0 last:pb-0">
       <div className="flex items-baseline justify-between gap-6">
         <div className="flex items-baseline gap-3">
-          <span className="font-mono text-[10px] tabular tracking-widest text-cinnabar">
+          <span className="font-mono text-[10px] tabular tracking-widest text-cyan">
             {String(index + 1).padStart(2, "0")}
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
             {scene.id}
           </span>
           {scene.kind && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-faint">
               {scene.kind}
             </span>
           )}
           {isModified && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-cyan">
               modified
             </span>
           )}
         </div>
         {scene.durationSec !== undefined && (
-          <span className="font-mono text-[10px] tabular text-paper-mute">
+          <span className="font-mono text-[10px] tabular text-fg-muted">
             {scene.durationSec.toFixed(1)}s
           </span>
         )}
@@ -309,15 +311,15 @@ function SceneRow({
         ) : (
           <button
             onClick={() => setEditing("title")}
-            className="mt-2 block w-full text-left transition-colors hover:bg-ink-raised/30"
+            className="mt-2 block w-full text-left transition-colors hover:bg-surface/30"
           >
-            <h4 className="display-sm text-lg text-paper">{currentTitle}</h4>
+            <h4 className="display-sm text-lg text-fg">{currentTitle}</h4>
           </button>
         )
       )}
 
       {scene.subtitle && (
-        <p className="mt-1 text-sm text-paper-mute">{scene.subtitle}</p>
+        <p className="mt-1 text-sm text-fg-muted">{scene.subtitle}</p>
       )}
 
       {/* Narration — click to edit */}
@@ -335,10 +337,10 @@ function SceneRow({
       ) : (
         <button
           onClick={() => setEditing("narration")}
-          className="mt-2 block w-full text-left transition-colors hover:bg-ink-raised/30"
+          className="mt-2 block w-full text-left transition-colors hover:bg-surface/30"
           title="Click to edit narration"
         >
-          <p className="max-w-2xl font-display text-base italic leading-relaxed text-paper">
+          <p className="max-w-2xl font-display text-base italic leading-relaxed text-fg">
             "{currentNarration}"
           </p>
         </button>
@@ -401,12 +403,12 @@ function EditableField({
         placeholder={placeholder}
         rows={multiline ? 3 : undefined}
         className={cn(
-          "w-full resize-y bg-transparent font-display italic leading-relaxed text-paper outline-none",
-          "border-b border-cinnabar pb-1",
+          "w-full resize-y bg-transparent font-display italic leading-relaxed text-fg outline-none",
+          "border-b border-cyan pb-1",
           multiline ? "text-base" : "text-lg"
         )}
       />
-      <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <p className="mt-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         ⏎ save · esc cancel
       </p>
     </div>
@@ -435,10 +437,10 @@ function ActionButton({
       className={cn(
         "border-b pb-1 text-sm font-medium transition-colors",
         disabled && "cursor-not-allowed opacity-50",
-        inflight && "border-brass/40 text-brass",
-        !inflight && tone === "primary" && "border-cinnabar text-cinnabar hover:text-paper",
-        !inflight && tone === "danger" && "border-alarm text-alarm hover:text-paper",
-        !inflight && tone === "neutral" && "border-brass text-paper-mute hover:text-paper"
+        inflight && "border-mist-10/40 text-fg-faint",
+        !inflight && tone === "primary" && "border-cyan text-cyan hover:text-fg",
+        !inflight && tone === "danger" && "border-alarm text-alarm hover:text-fg",
+        !inflight && tone === "neutral" && "border-mist-10 text-fg-muted hover:text-fg"
       )}
     >
       {label}
@@ -448,7 +450,7 @@ function ActionButton({
 
 // ─── Clarification flavor — agent asks a question before drafting ────────
 // Different visual treatment from approval prompts: this is an inquiry, not
-// a gate. Brass accent (not cinnabar — we're not asking for permission, we
+// a gate. Mist accent (not cyan — we're not asking for permission, we
 // want input). Question in display font, options as soft chip buttons,
 // optional context line above. The chat composer below the card handles
 // free-text answers naturally — no embedded textarea needed here.
@@ -480,8 +482,8 @@ function ClarificationCard({
       className={cn(
         "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
         submitting
-          ? "border-l-paper-mute/40 bg-paper-mute/[0.05] opacity-75 pointer-events-none"
-          : "border-l-brass bg-brass/[0.04]"
+          ? "border-l-fg-muted/40 bg-fg-muted/[0.05] opacity-75 pointer-events-none"
+          : "border-l-mist-10 bg-fg-faint/[0.04]"
       )}
       aria-busy={submitting}
     >
@@ -489,14 +491,14 @@ function ClarificationCard({
         <div className="flex items-baseline gap-3">
           <span
             className={cn(
-              "pulse-cinnabar h-1 w-1 self-center rounded-full",
-              submitting ? "bg-paper-mute/60" : "bg-brass"
+              "pulse-cyan h-1 w-1 self-center rounded-full",
+              submitting ? "bg-fg-muted/60" : "bg-fg-faint"
             )}
           />
           <span
             className={cn(
               "font-mono text-[10px] uppercase tracking-widest",
-              submitting ? "text-paper-mute" : "text-brass"
+              submitting ? "text-fg-muted" : "text-fg-faint"
             )}
           >
             {submitting
@@ -504,16 +506,16 @@ function ClarificationCard({
               : "agent · clarifying question"}
           </span>
         </div>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
           one-shot
         </span>
       </header>
 
       {context && (
-        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-paper-mute">{context}</p>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-fg-muted">{context}</p>
       )}
 
-      <h3 className="display-sm mt-3 max-w-3xl text-2xl text-paper">{prompt.question}</h3>
+      <h3 className="display-sm mt-3 max-w-3xl text-2xl text-fg">{prompt.question}</h3>
 
       {prompt.options.length > 0 && (
         <div className="mt-5 flex flex-wrap gap-2">
@@ -528,8 +530,8 @@ function ClarificationCard({
                   "rounded-full border px-4 py-1.5 font-sans text-sm transition-colors",
                   submitting && "cursor-not-allowed opacity-50",
                   isSkip
-                    ? "border-paper-mute/20 bg-transparent text-paper-mute hover:border-paper-mute/40 hover:text-paper"
-                    : "border-brass/40 bg-brass/[0.06] text-paper hover:border-brass hover:bg-brass/15"
+                    ? "border-fg-muted/20 bg-transparent text-fg-muted hover:border-fg-muted/40 hover:text-fg"
+                    : "border-mist-10/40 bg-fg-faint/[0.06] text-fg hover:border-mist-10 hover:bg-fg-faint/15"
                 )}
               >
                 {opt}
@@ -539,7 +541,7 @@ function ClarificationCard({
         </div>
       )}
 
-      <p className="mt-5 max-w-2xl text-xs leading-relaxed text-paper-mute">
+      <p className="mt-5 max-w-2xl text-xs leading-relaxed text-fg-muted">
         Pick an option above, or type a custom answer in the chat below — anything you send
         becomes the agent's direction for this question.
       </p>
@@ -585,7 +587,7 @@ function StageFailureCard({
       className={cn(
         "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
         submitting
-          ? "border-l-paper-mute/40 bg-paper-mute/[0.05] opacity-75 pointer-events-none"
+          ? "border-l-fg-muted/40 bg-fg-muted/[0.05] opacity-75 pointer-events-none"
           : "border-l-alarm bg-alarm/[0.05]"
       )}
       aria-busy={submitting}
@@ -594,14 +596,14 @@ function StageFailureCard({
         <div className="flex items-baseline gap-3">
           <span
             className={cn(
-              "pulse-cinnabar h-1 w-1 self-center rounded-full",
-              submitting ? "bg-paper-mute/60" : "bg-alarm"
+              "pulse-cyan h-1 w-1 self-center rounded-full",
+              submitting ? "bg-fg-muted/60" : "bg-alarm"
             )}
           />
           <span
             className={cn(
               "font-mono text-[10px] uppercase tracking-widest",
-              submitting ? "text-paper-mute" : "text-alarm"
+              submitting ? "text-fg-muted" : "text-alarm"
             )}
           >
             {submitting
@@ -609,17 +611,17 @@ function StageFailureCard({
               : `${stage} · failed`}
           </span>
           {attempt !== undefined && maxAttempts !== undefined && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
               attempt {attempt}/{maxAttempts}
             </span>
           )}
         </div>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
           recoverable
         </span>
       </header>
 
-      <h3 className="display-sm mt-2 max-w-3xl text-xl text-paper">{prompt.question}</h3>
+      <h3 className="display-sm mt-2 max-w-3xl text-xl text-fg">{prompt.question}</h3>
 
       {error && (
         <pre className="hairline mt-3 max-h-32 overflow-auto whitespace-pre-wrap break-words rounded border border-alarm/20 bg-alarm/[0.04] p-2 font-mono text-[11px] leading-relaxed text-alarm">
@@ -627,15 +629,15 @@ function StageFailureCard({
         </pre>
       )}
 
-      <p className="mt-3 max-w-2xl text-xs leading-relaxed text-paper-mute">
+      <p className="mt-3 max-w-2xl text-xs leading-relaxed text-fg-muted">
         The agent's review is above. Fix the underlying issue (install the
-        missing package, free up disk, etc) and click <span className="text-paper">retry</span> — the cache means only the
-        unfinished work re-runs. Or <span className="text-paper">cancel</span> to pause the pipeline and start a fresh
+        missing package, free up disk, etc) and click <span className="text-fg">retry</span> — the cache means only the
+        unfinished work re-runs. Or <span className="text-fg">cancel</span> to pause the pipeline and start a fresh
         message.
       </p>
 
       <footer className="mt-4 flex items-center justify-end gap-8">
-        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
           {submitting
             ? "waiting for the agent to resume…"
             : "click retry once you've fixed it"}
@@ -688,19 +690,56 @@ function ComposeApproval({
   onRespond: (response: string) => void | Promise<void>;
 }) {
   const revision = (prompt.payload as { revision?: number }).revision;
-  // Preview is now driven by the app-level PreviewProvider so the iframe
-  // appears in the slide-in PreviewPanel instead of launching the user's
-  // external browser.
-  const { current: preview, starting, openIframe, close } = usePreview();
+  // Preview previously auto-loaded the iframe in the slide-in PreviewPanel
+  // — but the user wants to be the one who opens the browser, not have
+  // an in-app surface pop in unannounced. We now start the dev server and
+  // hand the URL to the OS default browser via `openExternal`. The
+  // PreviewProvider is still consulted so we don't double-spawn the
+  // server when one is already running for this aspect.
+  const { current: preview, close } = usePreview();
   const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState<{ aspect: string; url: string } | null>(
+    () => {
+      // If the slide-in is already showing this aspect (legacy state from a
+      // prior session click), surface that as the active preview so the
+      // pill mirrors reality.
+      if (preview && preview.kind === "iframe") {
+        return { aspect: preview.aspect, url: preview.url };
+      }
+      return null;
+    }
+  );
+  const [starting, setStarting] = useState<string | null>(null);
 
   const handlePreview = useCallback(
     async (comp: CompositionRef) => {
       if (starting) return;
-      await openIframe({ workspace: comp.path, aspect: comp.aspect });
+      // Same aspect already running? Just re-launch the browser tab.
+      if (previewing && previewing.aspect === comp.aspect) {
+        await openExternal(previewing.url).catch(() => undefined);
+        return;
+      }
+      setStarting(comp.aspect);
+      try {
+        // Tear down any prior in-app slide-in iframe so we don't keep two
+        // dev servers running for the same workspace.
+        if (preview && preview.kind === "iframe") {
+          await close();
+        }
+        const { url } = await startPreview(comp.path);
+        setPreviewing({ aspect: comp.aspect, url });
+        await openExternal(url).catch(() => undefined);
+      } finally {
+        setStarting(null);
+      }
     },
-    [open, starting]
+    [starting, previewing, preview, close]
   );
+
+  const handleStopPreview = useCallback(async () => {
+    setPreviewing(null);
+    await stopPreview().catch(() => undefined);
+  }, []);
 
   const handleRespond = useCallback(
     async (option: string) => {
@@ -718,21 +757,13 @@ function ComposeApproval({
     [close, onRespond, submitting]
   );
 
-  // Convenience aliases so the JSX below reads cleanly. Only the iframe
-  // variant counts here — a video player taking over the panel doesn't
-  // mean a composition is "running" for compose-approval purposes.
-  const previewing =
-    preview && preview.kind === "iframe"
-      ? { aspect: preview.aspect, url: preview.url }
-      : null;
-
   return (
     <article
       className={cn(
         "hairline relative border-l-2 py-4 pl-5 pr-4 enter-rise transition-[opacity,filter] duration-200",
         submitting
-          ? "border-l-brass bg-brass/[0.04] opacity-75 pointer-events-none"
-          : "border-l-cinnabar bg-cinnabar/[0.03]"
+          ? "border-l-mist-10 bg-fg-faint/[0.04] opacity-75 pointer-events-none"
+          : "border-l-cyan bg-cyan/[0.03]"
       )}
       aria-busy={submitting}
     >
@@ -740,46 +771,46 @@ function ComposeApproval({
         <div className="flex items-baseline gap-3">
           <span
             className={cn(
-              "pulse-cinnabar h-1 w-1 self-center rounded-full",
-              submitting ? "bg-brass" : "bg-cinnabar"
+              "pulse-cyan h-1 w-1 self-center rounded-full",
+              submitting ? "bg-fg-faint" : "bg-cyan"
             )}
           />
           <span
             className={cn(
               "font-mono text-[10px] uppercase tracking-widest",
-              submitting ? "text-brass" : "text-cinnabar"
+              submitting ? "text-fg-faint" : "text-cyan"
             )}
           >
             {submitting ? "submitted · render queued" : "review · composition"}
           </span>
           {revision !== undefined && revision > 0 && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-faint">
               revision {revision}
             </span>
           )}
           {previewing && !submitting && (
-            <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-cinnabar">
-              <span className="pulse-cinnabar h-1 w-1 rounded-full bg-cinnabar" />
+            <span className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-cyan">
+              <span className="pulse-cyan h-1 w-1 rounded-full bg-cyan" />
               dev server · {previewing.aspect}
             </span>
           )}
         </div>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-          <span className="tabular text-paper">{compositions.length}</span> aspect
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+          <span className="tabular text-fg">{compositions.length}</span> aspect
           {compositions.length === 1 ? "" : "s"}
         </span>
       </header>
 
-      <h3 className="display-sm mt-2 text-xl text-paper">{prompt.question}</h3>
+      <h3 className="display-sm mt-2 text-xl text-fg">{prompt.question}</h3>
 
-      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-paper-mute">
+      <p className="mt-3 max-w-2xl text-sm leading-relaxed text-fg-muted">
         Each aspect was authored as a HyperFrames composition. Launch the dev server to
         see the actual GSAP timeline play in your browser — no full render needed. Type
-        notes below to ask the agent to adjust the composition; click <span className="text-cinnabar">render →</span> when it
+        notes below to ask the agent to adjust the composition; click <span className="text-cyan">render →</span> when it
         looks right.
       </p>
 
-      <ul className="hairline mt-4 divide-y divide-brass-line/40 border bg-ink/30">
+      <ul className="hairline mt-4 divide-y divide-mist-10/40 border bg-void/30">
         {compositions.map((comp) => {
           const isActive = previewing?.aspect === comp.aspect;
           const isStarting = starting === comp.aspect;
@@ -788,28 +819,28 @@ function ComposeApproval({
               key={comp.aspect}
               className={cn(
                 "flex items-baseline justify-between gap-6 px-4 py-3 transition-colors",
-                isActive && "bg-ink-edge"
+                isActive && "bg-elevated"
               )}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex items-baseline gap-3">
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
                     aspect
                   </span>
-                  <span className="font-display text-base font-semibold text-paper">
+                  <span className="font-display text-base font-semibold text-fg">
                     {comp.aspect}
                   </span>
                   {isActive && (
-                    <span className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
+                    <span className="font-mono text-[10px] uppercase tracking-widest text-cyan">
                       running
                     </span>
                   )}
                 </div>
-                <p className="mt-1 truncate font-mono text-[10px] text-paper-mute">
+                <p className="mt-1 truncate font-mono text-[10px] text-fg-muted">
                   {comp.indexHtml}
                 </p>
                 {isActive && (
-                  <p className="mt-1 font-mono text-[10px] text-cinnabar">{previewing.url}</p>
+                  <p className="mt-1 font-mono text-[10px] text-cyan">{previewing.url}</p>
                 )}
               </div>
               <div className="flex shrink-0 items-baseline gap-5">
@@ -817,14 +848,14 @@ function ComposeApproval({
                   <>
                     <button
                       onClick={() => previewing && openExternal(previewing.url).catch(() => undefined)}
-                      className="border-b border-brass pb-0.5 font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper"
-                      title="Also open the dev server in your default browser"
+                      className="border-b border-cyan pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cyan hover:text-fg"
+                      title="Open the dev server in your default browser again"
                     >
-                      browser ↗
+                      open in browser ↗
                     </button>
                     <button
-                      onClick={() => void close()}
-                      className="border-b border-alarm pb-0.5 font-mono text-[10px] uppercase tracking-widest text-alarm hover:text-paper"
+                      onClick={() => void handleStopPreview()}
+                      className="border-b border-alarm pb-0.5 font-mono text-[10px] uppercase tracking-widest text-alarm hover:text-fg"
                     >
                       stop
                     </button>
@@ -836,13 +867,14 @@ function ComposeApproval({
                     className={cn(
                       "border-b pb-0.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
                       isStarting
-                        ? "border-paper-mute/30 text-paper-mute/40"
+                        ? "border-fg-muted/30 text-fg-muted/40"
                         : previewing
-                          ? "cursor-not-allowed border-paper-mute/30 text-paper-mute/30"
-                          : "border-cinnabar text-cinnabar hover:text-paper"
+                          ? "cursor-not-allowed border-fg-muted/30 text-fg-muted/30"
+                          : "border-cyan text-cyan hover:text-fg"
                     )}
+                    title="Start the dev server and open in your default browser"
                   >
-                    {isStarting ? "starting…" : "preview →"}
+                    {isStarting ? "starting…" : "preview in browser ↗"}
                   </button>
                 )}
               </div>
@@ -852,7 +884,7 @@ function ComposeApproval({
       </ul>
 
       <footer className="mt-4 flex items-center justify-end gap-8">
-        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+        <span className="mr-auto font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
           {submitting
             ? "rendering — waiting for the next stage to start…"
             : "type below for revision notes · or render"}
