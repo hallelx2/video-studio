@@ -6,6 +6,7 @@ import {
   deleteSession as ipcDeleteSession,
   generateVideo,
   getConfig,
+  invalidateStage,
   isAgentRunning,
   listSessions as ipcListSessions,
   loadSession as ipcLoadSession,
@@ -511,8 +512,71 @@ export function WorkbenchRoute({
         );
         if (byId) handleModelChange(byId.id);
       },
+      onRetryStage: (stage) => {
+        if (!productId) return;
+        const intentLabels = {
+          rerender: "↻ Re-render only (stage 6)",
+          recompose: "↻ Recompose + render (stage 5+)",
+          renarrate: "↻ Regenerate narration (stage 4+)",
+          redraft: "↻ Re-draft script (stage 3+)",
+        } as const;
+        const verbLabels = {
+          rerender: "re-rendering (stage 6)",
+          recompose: "re-composing (stage 5+)",
+          renarrate: "regenerating narration (stage 4+)",
+          redraft: "re-drafting script (stage 3+)",
+        } as const;
+        void (async () => {
+          try {
+            // Push the user_message FIRST. deriveAgentState resets per-run
+            // state (status, stages, metrics) when a user_message arrives
+            // after a terminal event — without this marker, the previous
+            // run's "DONE / COMPLETE" card stays pinned at the bottom of
+            // the stream while the retry run executes invisibly behind it.
+            pushUserMessage(intentLabels[stage], "follow-up");
+
+            const { removed } = await invalidateStage(productId, stage);
+            const head = `**${verbLabels[stage]}** — wiped ${removed.length} cached artifact${removed.length === 1 ? "" : "s"}.`;
+            const tail =
+              removed.length === 0
+                ? ""
+                : "\n\n" +
+                  removed
+                    .slice(0, 8)
+                    .map((p) => `- \`${p.replace(/\\/g, "/")}\``)
+                    .join("\n") +
+                  (removed.length > 8 ? `\n- … +${removed.length - 8} more` : "");
+            setEvents((prev) => [
+              ...prev,
+              {
+                type: "agent_text",
+                messageId: `retry-${stage}-${Date.now()}`,
+                text: head + tail,
+              },
+            ]);
+            // Re-run with the existing brief. Resume detection skips every
+            // stage whose artifacts still exist on disk and picks up at the
+            // boundary we just wiped.
+            const brief =
+              briefRef.current ||
+              `Continue: ${stage} the existing project — pipeline state was just invalidated.`;
+            await startRun(brief);
+          } catch (err) {
+            setEvents((prev) => [
+              ...prev,
+              {
+                type: "error",
+                message: `${verbLabels[stage]} failed before run: ${
+                  err instanceof Error ? err.message : String(err)
+                }`,
+                recoverable: true,
+              },
+            ]);
+          }
+        })();
+      },
     }),
-    [agent.artifacts, agent.pendingPrompt, handleCreateSession, handleModelChange, handlePromptResponse, handleStop]
+    [agent.artifacts, agent.pendingPrompt, handleCreateSession, handleModelChange, handlePromptResponse, handleStop, productId, pushUserMessage, startRun]
   );
 
   const typeMeta = useMemo(() => VIDEO_TYPES.find((t) => t.id === videoType)!, [videoType]);
@@ -544,10 +608,10 @@ export function WorkbenchRoute({
       {currentSession && (
         <header className="hairline flex items-baseline justify-between gap-8 border-b px-10 py-5">
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
               session
             </p>
-            <h1 className="display-sm mt-1 truncate text-2xl text-paper">
+            <h1 className="display-sm mt-1 truncate text-2xl text-fg">
               {currentSession.title}
             </h1>
           </div>
@@ -558,20 +622,20 @@ export function WorkbenchRoute({
       {hasHistory ? (
         <div className="flex min-w-0 flex-1 overflow-hidden">
           <aside className="hairline flex w-[280px] shrink-0 flex-col gap-8 overflow-y-auto border-r px-6 py-8 stagger-children">
-            <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
               scaffold
             </p>
 
             <Field eyebrow="01" title="Video type">
-              <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
+              <div className="grid grid-cols-1 gap-px border border-mist-10 bg-mist-10">
                 {VIDEO_TYPES.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setVideoType(t.id as VideoType)}
                     disabled={running}
                     className={cn(
-                      "block bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                      videoType === t.id ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
+                      "block bg-void px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                      videoType === t.id ? "bg-elevated" : "enabled:hover:bg-surface"
                     )}
                   >
                     <span className="flex items-baseline justify-between">
@@ -579,24 +643,24 @@ export function WorkbenchRoute({
                         <span
                           className={
                             videoType === t.id
-                              ? "h-1.5 w-1.5 rounded-full bg-cinnabar"
+                              ? "h-1.5 w-1.5 rounded-full bg-cyan"
                               : "h-1.5 w-1.5"
                           }
                         />
-                        <span className="text-sm font-medium text-paper">{t.label}</span>
+                        <span className="text-sm font-medium text-fg">{t.label}</span>
                       </span>
-                      <span className="font-mono text-[10px] tabular text-paper-mute">
+                      <span className="font-mono text-[10px] tabular text-fg-muted">
                         {t.defaultScenes}/{t.defaultDuration}s
                       </span>
                     </span>
                   </button>
                 ))}
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-paper-mute">{typeMeta.description}</p>
+              <p className="mt-3 text-xs leading-relaxed text-fg-muted">{typeMeta.description}</p>
             </Field>
 
             <Field eyebrow="02" title="Formats">
-              <div className="grid grid-cols-1 gap-px border border-brass-line bg-brass-line">
+              <div className="grid grid-cols-1 gap-px border border-mist-10 bg-mist-10">
                 {FORMAT_OPTIONS.map((f) => {
                   const on = formats.includes(f.id);
                   return (
@@ -605,17 +669,17 @@ export function WorkbenchRoute({
                       onClick={() => toggleFormat(f.id)}
                       disabled={running}
                       className={cn(
-                        "flex items-center justify-between bg-ink px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-                        on ? "bg-ink-edge" : "enabled:hover:bg-ink-raised"
+                        "flex items-center justify-between bg-void px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+                        on ? "bg-elevated" : "enabled:hover:bg-surface"
                       )}
                     >
                       <span className="flex items-baseline gap-2">
                         <span
-                          className={on ? "h-1.5 w-1.5 rounded-full bg-cinnabar" : "h-1.5 w-1.5"}
+                          className={on ? "h-1.5 w-1.5 rounded-full bg-cyan" : "h-1.5 w-1.5"}
                         />
-                        <span className="text-sm font-medium text-paper">{f.label}</span>
+                        <span className="text-sm font-medium text-fg">{f.label}</span>
                       </span>
-                      <span className="font-mono text-[10px] tabular text-paper-mute">
+                      <span className="font-mono text-[10px] tabular text-fg-muted">
                         {f.aspect}
                       </span>
                     </button>
@@ -624,7 +688,7 @@ export function WorkbenchRoute({
               </div>
             </Field>
 
-            <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-paper-mute/85">
+            <p className="mt-auto pt-6 font-mono text-[10px] leading-relaxed text-fg-muted/85">
               type into the chat to interrupt mid-run or follow up after a render.
             </p>
           </aside>
@@ -708,9 +772,9 @@ function Field({
 }) {
   return (
     <div>
-      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-        <span className="text-cinnabar">{eyebrow}</span>{" "}
-        <span className="text-paper-mute">/ {title.toLowerCase()}</span>
+      <p className="mb-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+        <span className="text-cyan">{eyebrow}</span>{" "}
+        <span className="text-fg-muted">/ {title.toLowerCase()}</span>
       </p>
       {children}
     </div>

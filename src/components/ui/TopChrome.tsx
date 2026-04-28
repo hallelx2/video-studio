@@ -11,7 +11,7 @@ import { cn } from "../../lib/cn.js";
  * toggle button · settings button.
  *
  * Per DESIGN.md: chrome-thin (still chrome — just slightly more substantial),
- * no rounded corners on the bar itself, brass hairline divider only. Buttons
+ * no rounded corners on the bar itself, mist-10 hairline divider only. Buttons
  * inside use 2px corners + hover surface so they're visibly clickable.
  *
  * On macOS the BrowserWindow uses titleBarStyle="hiddenInset" so traffic
@@ -77,28 +77,28 @@ export function TopChrome({
   return (
     <header
       className={cn(
-        "hairline relative z-10 flex h-14 shrink-0 items-center justify-between border-b bg-ink pr-4",
+        "hairline relative z-10 flex h-14 shrink-0 items-center justify-between border-b bg-void pr-4",
         trafficLightGap
       )}
     >
       <div className="flex items-center gap-6">
         <BrandMark />
-        <span className="h-5 w-px bg-brass-line" aria-hidden />
+        <span className="h-5 w-px bg-mist-10" aria-hidden />
         <nav className="flex items-baseline gap-2.5 font-mono text-[11px] uppercase tracking-widest">
           {breadcrumb.map((crumb, i) => (
             <span key={i} className="flex items-center gap-2.5">
               {crumb.to ? (
                 <Link
                   to={crumb.to}
-                  className="text-paper-mute transition-colors hover:text-paper"
+                  className="text-fg-muted transition-colors hover:text-fg"
                 >
                   {crumb.label}
                 </Link>
               ) : (
-                <span className="text-paper">{crumb.label}</span>
+                <span className="text-fg">{crumb.label}</span>
               )}
               {i < breadcrumb.length - 1 && (
-                <span className="text-paper-mute/85">/</span>
+                <span className="text-fg-muted/85">/</span>
               )}
             </span>
           ))}
@@ -107,7 +107,7 @@ export function TopChrome({
 
       <div className="flex items-center gap-2.5">
         {running && (
-          <span className="mr-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-cinnabar">
+          <span className="mr-3 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-cyan">
             <Pulse size="sm" />
             <span>{phase ?? "running"}</span>
           </span>
@@ -122,7 +122,7 @@ export function TopChrome({
 }
 
 // ─── Brand mark ───────────────────────────────────────────────────────────
-// Stylized lens + play triangle. The cinnabar dot in the upper-right is a
+// Stylized lens + play triangle. The cyan dot in the upper-right is a
 // classic "REC" marker — subtle nod to the app's purpose without being
 // literal. Wordmark in Fraunces small-caps tracking, slightly larger than
 // before so the brand reads at the top of the viewport.
@@ -136,7 +136,7 @@ function BrandMark() {
       <span className="relative inline-block h-8 w-8">
         <svg
           viewBox="0 0 32 32"
-          className="h-8 w-8 text-paper transition-transform group-hover:rotate-3"
+          className="h-8 w-8 text-fg transition-transform group-hover:rotate-3"
           aria-hidden
         >
           {/* Lens ring */}
@@ -161,18 +161,18 @@ function BrandMark() {
           {/* Play triangle */}
           <path
             d="M13 11.5 L21.5 16 L13 20.5 Z"
-            fill="var(--color-cinnabar)"
+            fill="var(--color-cyan)"
           />
         </svg>
         {/* REC dot */}
         <span
           aria-hidden
-          className="absolute right-0 top-0 h-2 w-2 rounded-full bg-cinnabar shadow-[0_0_6px_var(--color-cinnabar-glow)]"
+          className="absolute right-0 top-0 h-2 w-2 rounded-full bg-cyan shadow-[0_0_6px_var(--color-cyan-glow)]"
         />
       </span>
-      <span className="flex items-baseline gap-1.5 font-display text-[18px] font-semibold tracking-tight text-paper">
+      <span className="flex items-baseline gap-1.5 font-display text-[18px] font-semibold tracking-tight text-fg">
         Video
-        <span className="italic text-paper-mute transition-colors group-hover:text-paper">
+        <span className="italic text-fg-muted transition-colors group-hover:text-fg">
           Studio
         </span>
       </span>
@@ -200,8 +200,8 @@ function IconButton({
   const className = cn(
     "group inline-flex h-9 w-9 items-center justify-center rounded-md border transition-colors",
     active
-      ? "border-brass/60 bg-ink-edge text-paper"
-      : "border-paper-mute/30 text-paper hover:border-brass/50 hover:bg-ink-edge"
+      ? "border-mist-10/60 bg-elevated text-fg"
+      : "border-fg-muted/30 text-fg hover:border-mist-10/50 hover:bg-elevated"
   );
   if (to) {
     return (
@@ -225,7 +225,7 @@ function ThemeToggle({
   onChange: (next: ThemeId) => void;
 }) {
   const next: ThemeId = theme === "noir" ? "creme" : "noir";
-  const label = `Switch to Atelier ${next === "noir" ? "Noir" : "Crème"}`;
+  const label = `Switch to ${next === "noir" ? "Composio Dark" : "Composio Daylight"}`;
   return (
     <IconButton onClick={() => onChange(next)} title={label}>
       {theme === "noir" ? (

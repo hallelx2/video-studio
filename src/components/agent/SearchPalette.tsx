@@ -110,7 +110,7 @@ export function SearchPalette({
       role="dialog"
       aria-modal="true"
       aria-label="Search sessions"
-      className="fixed inset-0 z-[100] flex items-start justify-center bg-ink/70 px-4 pt-[12vh] backdrop-blur-sm"
+      className="fixed inset-0 z-[100] flex items-start justify-center bg-void/70 px-4 pt-[12vh] backdrop-blur-sm"
       onMouseDown={(e) => {
         // Click outside the panel closes
         if (e.target === e.currentTarget) onClose();
@@ -118,36 +118,36 @@ export function SearchPalette({
     >
       <div
         className={cn(
-          "w-full max-w-2xl overflow-hidden rounded-2xl border border-paper-mute/15 bg-ink-raised shadow-2xl shadow-ink/80",
+          "w-full max-w-2xl overflow-hidden rounded-2xl border border-fg-muted/15 bg-surface shadow-2xl shadow-void/80",
           "enter-rise"
         )}
       >
         {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-paper-mute/10 px-5 py-4">
-          <SearchIcon className="h-4 w-4 text-paper-mute" />
+        <div className="flex items-center gap-3 border-b border-fg-muted/10 px-5 py-4">
+          <SearchIcon className="h-4 w-4 text-fg-muted" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search sessions across all projects…"
-            className="w-full bg-transparent font-sans text-base text-paper placeholder:text-paper-mute/55 focus:outline-none"
+            className="w-full bg-transparent font-sans text-base text-fg placeholder:text-fg-muted/55 focus:outline-none"
             type="search"
             autoComplete="off"
             spellCheck={false}
           />
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/80">
             esc
           </span>
         </div>
 
         {/* Body */}
         {loading ? (
-          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
             loading sessions…
           </p>
         ) : filtered.length === 0 ? (
-          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+          <p className="px-5 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
             {sessions.length === 0
               ? "no sessions yet · type / in a project to start one"
               : `no matches for "${query}"`}
@@ -169,11 +169,11 @@ export function SearchPalette({
         )}
 
         {/* Footer */}
-        <footer className="flex items-center justify-between border-t border-paper-mute/10 px-5 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+        <footer className="flex items-center justify-between border-t border-fg-muted/10 px-5 py-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
             {filtered.length} of {sessions.length}
           </span>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/80">
             ↑↓ nav · ⏎ open · esc close
           </span>
         </footer>
@@ -207,27 +207,27 @@ function PaletteRow({
       onClick={onSelect}
       className={cn(
         "group flex w-full items-start gap-4 px-5 py-3 text-left transition-colors",
-        active ? "bg-ink-edge" : "hover:bg-ink-edge/60"
+        active ? "bg-elevated" : "hover:bg-elevated/60"
       )}
     >
       <span className="mt-1.5 shrink-0">
         <span
           className={cn(
             "block h-1.5 w-1.5 rounded-full transition-colors",
-            active ? "bg-cinnabar" : "bg-paper-mute/30"
+            active ? "bg-cyan" : "bg-fg-muted/30"
           )}
         />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-sans text-sm text-paper">
+        <span className="block truncate font-sans text-sm text-fg">
           <Highlight text={row.title} query={query} />
         </span>
-        <span className="mt-0.5 flex items-baseline gap-2 font-mono text-[10px] text-paper-mute">
-          <span className="truncate text-paper-mute">
+        <span className="mt-0.5 flex items-baseline gap-2 font-mono text-[10px] text-fg-muted">
+          <span className="truncate text-fg-muted">
             <Highlight text={row.projectName} query={query} />
           </span>
           <span>·</span>
-          <span className="truncate text-brass">
+          <span className="truncate text-fg-faint">
             <Highlight text={videoTypeMeta?.label ?? row.scaffold.videoType} query={query} />
           </span>
           <span>·</span>
@@ -241,7 +241,7 @@ function PaletteRow({
         aria-hidden
         className={cn(
           "self-center font-mono text-base transition-opacity",
-          active ? "text-cinnabar opacity-100" : "text-paper-mute opacity-0 group-hover:opacity-100"
+          active ? "text-cyan opacity-100" : "text-fg-muted opacity-0 group-hover:opacity-100"
         )}
       >
         →
@@ -263,7 +263,7 @@ function Highlight({ text, query }: { text: string; query: string }) {
   return (
     <>
       {before}
-      <span className="text-paper">
+      <span className="text-fg">
         <strong className="font-semibold">{match}</strong>
       </span>
       {after}

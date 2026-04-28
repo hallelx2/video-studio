@@ -1,7 +1,7 @@
 import { cn } from "../../lib/cn.js";
 
 /**
- * The cinnabar heartbeat — used wherever the agent is "thinking" or a state is active.
+ * The cyan heartbeat — used wherever the agent is "thinking" or a state is active.
  * 1.4s cycle, opacity 0.4 → 1.0 → 0.4, defined in index.css.
  */
 export function Pulse({
@@ -19,7 +19,7 @@ export function Pulse({
       className={cn(
         "inline-block rounded-full",
         dim,
-        active ? "bg-cinnabar pulse-cinnabar" : "bg-paper-mute/40",
+        active ? "bg-cyan pulse-cyan" : "bg-fg-muted/40",
         className
       )}
     />

@@ -11,21 +11,22 @@ import {
   ListChecks,
   NotebookPen,
   Wrench,
+  ChevronRight,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import type { ToolCallActivity } from "../../lib/agent-state.js";
 import { ToolStatusTitle } from "./ToolStatusTitle.js";
+import { StreamRow, RowBadge } from "./StreamRow.js";
 
 /**
- * One tool call, OpenCode-trigger-style.
+ * One tool call. Compact when collapsed (verb + target + elapsed), expands
+ * into an artifact-aware preview (file diff, command + output, etc.).
  *
- *   Reading… vectorless/README.md                              · 0.4s
+ *   ◯ Read    vectorless/README.md        · 0.4s   ▸
  *
- * - Title (verb form): animated swap from active to done
- * - Subtitle: smart-extracted label (path, command, query, etc)
- * - Trailing meta: elapsed time
- * - Click row to expand — full args + output
+ * Running rows light up with the bioluminescent cyan halo and a top-edge
+ * stripe. Errors land hard with the signature 4×4 brutalist offset shadow.
  */
 export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
   const [open, setOpen] = useState(false);
@@ -44,86 +45,83 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
   const isError = activity.status === "error";
 
   const Icon = iconFor(activity.toolName);
+  const tone = isError ? "alarm" : isRunning ? "running" : "tool";
 
   return (
-    <article
-      className={cn(
-        "min-w-0 transition-colors",
-        isRunning && "bg-ink-raised/40",
-        isError && "bg-alarm/[0.05]"
-      )}
-    >
-      <button
+    <article className="min-w-0">
+      <StreamRow
+        tone={tone}
+        icon={<Icon className="h-3.5 w-3.5" strokeWidth={1.75} />}
+        running={isRunning}
+        brutalist={isError}
+        expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "flex w-full min-w-0 items-center gap-3 border-l-2 px-4 py-2 text-left transition-colors",
-          isRunning && "border-l-cinnabar",
-          !isRunning && !isError && "border-l-brass-line hover:border-l-brass",
-          isError && "border-l-alarm"
-        )}
-      >
-        {/* Tool icon — small, muted, anchored left */}
-        <Icon
-          className={cn(
-            "h-4 w-4 shrink-0 transition-colors",
-            isRunning && "text-cinnabar",
-            isError && "text-alarm",
-            !isRunning && !isError && "text-paper-mute/85"
-          )}
-          aria-hidden
-        />
-
-        {/* Title (active/done verb swap) + subtitle (label) */}
-        <span className="flex min-w-0 flex-1 items-baseline gap-3">
-          <ToolStatusTitle
-            active={isRunning}
-            activeText={verbs.active}
-            doneText={verbs.done}
-            className={cn(
-              "shrink-0 text-sm font-medium",
-              isRunning && "text-shimmer-cinnabar",
-              isError && "text-alarm",
-              !isRunning && !isError && "text-paper"
+        ariaLabel={isRunning ? verbs.active : verbs.done}
+        header={
+          <span className="flex min-w-0 items-baseline gap-2.5">
+            <ToolStatusTitle
+              active={isRunning}
+              activeText={verbs.active}
+              doneText={verbs.done}
+              // Wrapper carries typography + base color. The shimmer is
+              // pushed down to the leaf text spans via runningClassName so
+              // background-clip: text doesn't leak the gradient beyond the
+              // verb and read as "the whole row is shimmering".
+              className={cn(
+                "shrink-0 text-[13px] font-medium tracking-tight",
+                isError ? "text-alarm" : "text-fg"
+              )}
+              runningClassName={!isError ? "text-shimmer-cyan" : undefined}
+            />
+            {subtitle && (
+              // The subtitle stays calm — shimmer is reserved for the verb
+              // (the part that changes when the tool finishes). Two shimmer
+              // animations side-by-side made the whole row read as "div is
+              // shimmering" instead of "this verb is in flight".
+              <span
+                className={cn(
+                  "min-w-0 flex-1 truncate font-mono text-[12px]",
+                  isRunning ? "text-cyan/70" : "text-fg-muted"
+                )}
+              >
+                {subtitle}
+              </span>
             )}
-          />
-          {subtitle && (
+          </span>
+        }
+        status={
+          <>
+            {isError && <RowBadge tone="alarm">error</RowBadge>}
             <span
               className={cn(
-                "min-w-0 flex-1 truncate font-mono text-xs",
-                isRunning ? "text-shimmer" : "text-paper-mute"
+                "font-mono text-[10px] tabular",
+                isRunning ? "text-cyan/85" : "text-fg-muted/85"
               )}
             >
-              {subtitle}
+              {formatMs(elapsedMs)}
             </span>
-          )}
-        </span>
+            <ChevronRight
+              className={cn(
+                "h-3.5 w-3.5 text-fg-muted/70 transition-transform duration-200",
+                open && "rotate-90 text-fg"
+              )}
+              strokeWidth={2}
+              aria-hidden
+            />
+          </>
+        }
+      >
+        {/* Body intentionally empty when collapsed — header carries the row. */}
+        <span className="sr-only">{verbs.done}</span>
+      </StreamRow>
 
-        {/* Trailing meta: status pill + elapsed */}
-        <span className="flex shrink-0 items-baseline gap-3">
-          {isError && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-alarm">
-              error
-            </span>
-          )}
-          <span className="font-mono text-[10px] tabular text-paper-mute">
-            {formatMs(elapsedMs)}
-          </span>
-          <span
-            className={cn(
-              "font-mono text-[10px] tabular tracking-widest text-paper-mute/85 transition-transform",
-              open && "rotate-90"
-            )}
-            aria-hidden
-          >
-            ▸
-          </span>
-        </span>
-      </button>
-
-      {/* Expanded details — artifact-aware per tool kind */}
+      {/* Expanded artifact — sits flush under the row, indented to align with
+          the icon disc + content column for visual continuity. */}
       {open && (
-        <div className="enter-rise space-y-3 px-6 pb-3 pt-2">
-          <ArtifactDetails activity={activity} fullInput={fullInput} />
+        <div className="enter-rise mt-1 pl-[40px] pr-3 pb-3">
+          <div className="space-y-3 rounded border border-mist-08 bg-surface/60 p-4">
+            <ArtifactDetails activity={activity} fullInput={fullInput} />
+          </div>
         </div>
       )}
     </article>
@@ -132,8 +130,7 @@ export function ToolCallCard({ activity }: { activity: ToolCallActivity }) {
 
 // ─── Artifact-aware detail rendering ──────────────────────────────────────
 // For Read/Write/Edit/Bash, render the content as a proper artifact preview
-// instead of just dumping JSON. This is the difference between a log and a
-// Claude-Code-style streaming UI.
+// instead of just dumping JSON.
 
 function ArtifactDetails({
   activity,
@@ -173,14 +170,16 @@ function ReadDetails({
     <>
       <Path label="file" path={path}>
         {(offset || limit) && (
-          <span className="font-mono text-[10px] tabular text-paper-mute">
+          <span className="font-mono text-[10px] tabular text-fg-muted">
             {offset ? `lines ${offset}+` : ""}
             {limit ? ` (${limit} max)` : ""}
           </span>
         )}
       </Path>
       {activity.output && (
-        <Detail label={`content · ${formatBytes(activity.output.length)} · ${activity.output.split("\n").length} lines`}>
+        <Detail
+          label={`content · ${formatBytes(activity.output.length)} · ${activity.output.split("\n").length} lines`}
+        >
           <CodeBlock language={extOf(path)} content={activity.output} />
         </Detail>
       )}
@@ -201,13 +200,15 @@ function WriteDetails({
     <>
       <Path label="wrote" path={path} />
       {content && (
-        <Detail label={`content · ${formatBytes(content.length)} · ${content.split("\n").length} lines`}>
+        <Detail
+          label={`content · ${formatBytes(content.length)} · ${content.split("\n").length} lines`}
+        >
           <CodeBlock language={extOf(path)} content={content} />
         </Detail>
       )}
       {activity.output && (
         <Detail label="result">
-          <pre className="hairline border bg-ink-raised p-3 font-mono text-[11px] text-paper-mute">
+          <pre className="rounded border border-mist-10 bg-surface p-3 font-mono text-[11px] text-fg-muted">
             {activity.output}
           </pre>
         </Detail>
@@ -231,7 +232,7 @@ function EditDetails({
     <>
       <Path label="edit" path={path}>
         {replaceAll && (
-          <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-faint">
             replace all
           </span>
         )}
@@ -261,9 +262,7 @@ function BashDetails({
   const description = input?.description as string | undefined;
   return (
     <>
-      {description && (
-        <p className="text-xs italic text-paper-mute">{description}</p>
-      )}
+      {description && <p className="text-[12px] italic text-fg-muted">{description}</p>}
       {command && (
         <Detail label="command">
           <CodeBlock language="bash" content={command} />
@@ -300,7 +299,7 @@ function DefaultDetails({
         </Detail>
       )}
       {activity.output === null && activity.status !== "running" && (
-        <p className="font-mono text-[11px] text-paper-mute/85">(no output captured)</p>
+        <p className="font-mono text-[11px] text-fg-muted/85">(no output captured)</p>
       )}
     </>
   );
@@ -317,10 +316,10 @@ function Path({
 }) {
   return (
     <div className="flex items-baseline gap-3">
-      <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         {label}
       </span>
-      <span className="min-w-0 flex-1 truncate font-mono text-xs text-paper">{path}</span>
+      <span className="min-w-0 flex-1 truncate font-mono text-xs text-fg">{path}</span>
       {children}
     </div>
   );
@@ -338,10 +337,10 @@ function CodeBlock({
   return (
     <pre
       className={cn(
-        "hairline max-h-80 overflow-auto border p-3 font-mono text-[11px] leading-relaxed",
-        tone === "accent" && "border-cinnabar/30 bg-cinnabar/[0.04] text-paper",
+        "max-h-80 overflow-auto rounded border p-3 font-mono text-[11px] leading-relaxed",
+        tone === "accent" && "border-cyan/30 bg-cyan/[0.04] text-fg",
         tone === "alarm" && "border-alarm/30 bg-alarm/[0.06] text-alarm",
-        !tone && "bg-ink-raised text-paper"
+        !tone && "border-mist-10 bg-surface text-fg"
       )}
       data-language={language}
     >
@@ -358,7 +357,7 @@ function extOf(path: string): string {
 function Detail({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <p className="mb-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         {label}
       </p>
       {children}
@@ -367,8 +366,6 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
 }
 
 // ─── Verb mapping for known tools ──────────────────────────────────────────
-// Active form ends with an em-dash + ellipsis to feel in-progress.
-// Done form is a plain past-tense verb.
 
 interface Verbs {
   active: string;
@@ -395,9 +392,6 @@ function verbsFor(toolName: string): Verbs {
 }
 
 // ─── Tool icon map ────────────────────────────────────────────────────────
-// One small icon per tool kind so the eye can scan a long stream by shape
-// before it reads the title. Anything we don't know about falls back to a
-// generic wrench so the row still renders cleanly.
 
 const TOOL_ICONS: Record<string, LucideIcon> = {
   Read: FileText,
@@ -418,7 +412,6 @@ function iconFor(toolName: string): LucideIcon {
 }
 
 // ─── Smart label extraction (OpenCode pattern) ────────────────────────────
-// Try a list of common keys in priority order. First non-empty wins.
 
 const LABEL_KEYS = [
   "command",
@@ -444,7 +437,6 @@ function extractLabel(input: unknown): string | null {
     const v = obj[key];
     if (typeof v === "string" && v.length > 0) return v;
   }
-  // Last-resort: stringify but truncate
   const json = JSON.stringify(obj);
   return json.length > 80 ? json.slice(0, 77) + "…" : json;
 }

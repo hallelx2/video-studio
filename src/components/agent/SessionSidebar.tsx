@@ -32,19 +32,19 @@ export function SessionSidebar({
   const grouped = useMemo(() => groupByRecency(sessions), [sessions]);
 
   return (
-    <aside className="hairline flex w-[260px] shrink-0 flex-col overflow-hidden border-r bg-ink">
+    <aside className="hairline flex w-[260px] shrink-0 flex-col overflow-hidden border-r bg-void">
       {/* Project header */}
       <header className="hairline border-b px-5 pb-4 pt-6">
         <Link
           to="/"
-          className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
+          className="font-mono text-[10px] uppercase tracking-widest text-fg-muted transition-colors hover:text-fg"
         >
           ← all projects
         </Link>
-        <h2 className="display-sm mt-2 truncate text-xl text-paper" title={projectId}>
+        <h2 className="display-sm mt-2 truncate text-xl text-fg" title={projectId}>
           {projectId}
         </h2>
-        <p className="mt-1 font-mono text-[10px] tabular tracking-widest text-paper-mute">
+        <p className="mt-1 font-mono text-[10px] tabular tracking-widest text-fg-muted">
           {sessions.length} session{sessions.length === 1 ? "" : "s"}
         </p>
       </header>
@@ -55,14 +55,14 @@ export function SessionSidebar({
           type="button"
           onClick={onCreateNew}
           className={cn(
-            "group flex w-full items-center gap-2 rounded-lg border border-paper-mute/15 bg-ink-raised px-3 py-2",
-            "text-sm font-medium text-paper transition-colors",
-            "hover:border-paper-mute/30 hover:bg-ink-edge"
+            "group flex w-full items-center gap-2 rounded-lg border border-fg-muted/15 bg-surface px-3 py-2",
+            "text-sm font-medium text-fg transition-colors",
+            "hover:border-fg-muted/30 hover:bg-elevated"
           )}
         >
-          <PlusGlyph className="h-3.5 w-3.5 text-paper-mute group-hover:text-cinnabar" />
+          <PlusGlyph className="h-3.5 w-3.5 text-fg-muted group-hover:text-cyan" />
           <span>New session</span>
-          <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
+          <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-fg-muted/80">
             ⌘N
           </span>
         </button>
@@ -71,13 +71,13 @@ export function SessionSidebar({
       {/* Session list */}
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {sessions.length === 0 ? (
-          <p className="px-3 py-6 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+          <p className="px-3 py-6 text-center font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
             no sessions yet
           </p>
         ) : (
           grouped.map((group) => (
             <section key={group.label} className="mb-4 last:mb-0">
-              <h3 className="px-3 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
+              <h3 className="px-3 pb-1.5 pt-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted/80">
                 {group.label}
               </h3>
               <ul>
@@ -139,7 +139,7 @@ function SessionRow({
     <li
       className={cn(
         "group/row mb-px rounded-lg transition-colors",
-        active ? "bg-ink-edge" : "hover:bg-ink-raised"
+        active ? "bg-elevated" : "hover:bg-surface"
       )}
     >
       <div
@@ -163,7 +163,7 @@ function SessionRow({
             <span
               className={cn(
                 "block h-1.5 w-1.5 rounded-full transition-colors",
-                active ? "bg-cinnabar" : "bg-transparent"
+                active ? "bg-cyan" : "bg-transparent"
               )}
             />
           </span>
@@ -185,23 +185,23 @@ function SessionRow({
                   }
                   e.stopPropagation();
                 }}
-                className="block w-full bg-transparent font-sans text-sm text-paper focus:outline-none"
+                className="block w-full bg-transparent font-sans text-sm text-fg focus:outline-none"
               />
             ) : (
               <span
                 className={cn(
                   "block truncate font-sans text-sm",
-                  active ? "text-paper" : "text-paper/90"
+                  active ? "text-fg" : "text-fg/90"
                 )}
               >
                 {session.title}
               </span>
             )}
-            <span className="mt-0.5 flex items-baseline gap-2 font-mono text-[10px] text-paper-mute">
-              <span className="truncate text-brass">
+            <span className="mt-0.5 flex items-baseline gap-2 font-mono text-[10px] text-fg-muted">
+              <span className="truncate text-fg-faint">
                 {videoTypeMeta?.label ?? session.scaffold.videoType}
               </span>
-              <span className="shrink-0 tabular text-paper-mute/85">·</span>
+              <span className="shrink-0 tabular text-fg-muted/85">·</span>
               <span className="shrink-0 tabular">{relativeTime(session.updatedAt)}</span>
             </span>
           </span>
@@ -217,7 +217,7 @@ function SessionRow({
                 setDraft(session.title);
                 setEditing(true);
               }}
-              className="rounded-md p-1 text-paper-mute transition-colors hover:bg-ink-edge hover:text-paper"
+              className="rounded-md p-1 text-fg-muted transition-colors hover:bg-elevated hover:text-fg"
               title="Rename (or right-click)"
             >
               <PencilGlyph className="h-3 w-3" />
@@ -228,7 +228,7 @@ function SessionRow({
                 e.stopPropagation();
                 if (window.confirm(`Delete session "${session.title}"?`)) onDelete();
               }}
-              className="rounded-md p-1 text-paper-mute transition-colors hover:bg-alarm/15 hover:text-alarm"
+              className="rounded-md p-1 text-fg-muted transition-colors hover:bg-alarm/15 hover:text-alarm"
               title="Delete"
             >
               <TrashGlyph className="h-3 w-3" />

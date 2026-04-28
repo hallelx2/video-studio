@@ -31,15 +31,15 @@ export function TabStrip<T extends string>({
             onClick={() => onChange(tab.id)}
             className={cn(
               "relative flex items-center gap-2 px-5 py-3 font-mono text-[10px] uppercase tracking-widest transition-colors",
-              isActive ? "text-paper" : "text-paper-mute hover:text-paper"
+              isActive ? "text-fg" : "text-fg-muted hover:text-fg"
             )}
           >
             <span>{tab.label}</span>
             {tab.badge && (
-              <span className="tabular text-cinnabar">{tab.badge}</span>
+              <span className="tabular text-cyan">{tab.badge}</span>
             )}
             {isActive && (
-              <span className="absolute bottom-[-1px] left-3 right-3 h-px bg-cinnabar" />
+              <span className="absolute bottom-[-1px] left-3 right-3 h-px bg-cyan" />
             )}
           </button>
         );

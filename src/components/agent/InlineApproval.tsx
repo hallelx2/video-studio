@@ -4,7 +4,6 @@ import type { PendingPrompt } from "../../lib/agent-state.js";
 import {
   openExternal,
   readText,
-  startPreview,
   stopPreview,
   writeText,
 } from "../../lib/agent-client.js";
@@ -690,19 +689,17 @@ function ComposeApproval({
   onRespond: (response: string) => void | Promise<void>;
 }) {
   const revision = (prompt.payload as { revision?: number }).revision;
-  // Preview previously auto-loaded the iframe in the slide-in PreviewPanel
-  // — but the user wants to be the one who opens the browser, not have
-  // an in-app surface pop in unannounced. We now start the dev server and
-  // hand the URL to the OS default browser via `openExternal`. The
-  // PreviewProvider is still consulted so we don't double-spawn the
-  // server when one is already running for this aspect.
-  const { current: preview, close } = usePreview();
+  // Preview opens in the in-app slide-in PreviewPanel by default — keeps
+  // the workflow inside the desktop surface so the user doesn't lose
+  // focus to a browser window mid-approval. The "open in browser ↗"
+  // button on a running preview is the explicit escape hatch for users
+  // who want devtools or a larger viewport.
+  const { current: preview, openIframe, close } = usePreview();
   const [submitting, setSubmitting] = useState(false);
   const [previewing, setPreviewing] = useState<{ aspect: string; url: string } | null>(
     () => {
-      // If the slide-in is already showing this aspect (legacy state from a
-      // prior session click), surface that as the active preview so the
-      // pill mirrors reality.
+      // If the slide-in is already showing this aspect, mirror that as
+      // the active preview so the pill reflects reality.
       if (preview && preview.kind === "iframe") {
         return { aspect: preview.aspect, url: preview.url };
       }
@@ -713,27 +710,30 @@ function ComposeApproval({
 
   const handlePreview = useCallback(
     async (comp: CompositionRef) => {
+      console.log("[InlineApproval] preview clicked → openIframe (in-app)", {
+        aspect: comp.aspect,
+        workspace: comp.path,
+      });
       if (starting) return;
-      // Same aspect already running? Just re-launch the browser tab.
       if (previewing && previewing.aspect === comp.aspect) {
-        await openExternal(previewing.url).catch(() => undefined);
+        await openIframe({ workspace: comp.path, aspect: comp.aspect }).catch(
+          () => undefined
+        );
         return;
       }
       setStarting(comp.aspect);
       try {
-        // Tear down any prior in-app slide-in iframe so we don't keep two
-        // dev servers running for the same workspace.
-        if (preview && preview.kind === "iframe") {
-          await close();
-        }
-        const { url } = await startPreview(comp.path);
+        const { url } = await openIframe({
+          workspace: comp.path,
+          aspect: comp.aspect,
+        });
+        console.log("[InlineApproval] dev server up — slide-in mounting", { url });
         setPreviewing({ aspect: comp.aspect, url });
-        await openExternal(url).catch(() => undefined);
       } finally {
         setStarting(null);
       }
     },
-    [starting, previewing, preview, close]
+    [starting, previewing, openIframe]
   );
 
   const handleStopPreview = useCallback(async () => {
@@ -872,9 +872,9 @@ function ComposeApproval({
                           ? "cursor-not-allowed border-fg-muted/30 text-fg-muted/30"
                           : "border-cyan text-cyan hover:text-fg"
                     )}
-                    title="Start the dev server and open in your default browser"
+                    title="Start the dev server and open the preview inside the app"
                   >
-                    {isStarting ? "starting…" : "preview in browser ↗"}
+                    {isStarting ? "starting…" : "preview ↗"}
                   </button>
                 )}
               </div>

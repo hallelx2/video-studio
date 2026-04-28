@@ -3,8 +3,8 @@ import type { Stage, StageId } from "../../lib/agent-state.js";
 
 /**
  * The 6-stage pipeline as a horizontal sequence. Always visible at the top
- * of the agent inspector. Per DESIGN.md: hairline cells, cinnabar for active,
- * brass for elapsed. No icons — just numerals and labels.
+ * of the agent inspector. Per DESIGN.md: hairline cells, cyan for active,
+ * fg-faint for elapsed. No icons — just numerals and labels.
  */
 export function StageTimeline({
   stages,
@@ -28,16 +28,16 @@ export function StageTimeline({
             className={cn(
               "group relative flex flex-1 items-center gap-3 px-5 py-4 transition-colors",
               !isLast && "hairline border-r",
-              isActive && "bg-ink-raised"
+              isActive && "bg-surface"
             )}
           >
             <span
               className={cn(
                 "font-mono text-[10px] tabular tracking-widest",
-                isActive && "text-cinnabar",
-                isComplete && "text-paper",
+                isActive && "text-cyan",
+                isComplete && "text-fg",
                 isError && "text-alarm",
-                isPending && "text-paper-mute/50"
+                isPending && "text-fg-muted/50"
               )}
             >
               {String(i + 1).padStart(2, "0")}
@@ -48,35 +48,35 @@ export function StageTimeline({
                 <span
                   className={cn(
                     "text-sm font-medium",
-                    isActive && "text-paper",
-                    isComplete && "text-paper",
+                    isActive && "text-fg",
+                    isComplete && "text-fg",
                     isError && "text-alarm",
-                    isPending && "text-paper-mute/80"
+                    isPending && "text-fg-muted/80"
                   )}
                 >
                   {stage.label}
                 </span>
                 {isActive && (
-                  <span className="pulse-cinnabar h-1 w-1 rounded-full bg-cinnabar" />
+                  <span className="pulse-cyan h-1 w-1 rounded-full bg-cyan" />
                 )}
               </div>
               {stage.message && (isActive || isError) && (
-                <p className="mt-1 truncate font-mono text-[10px] text-paper-mute">
+                <p className="mt-1 truncate font-mono text-[10px] text-fg-muted">
                   {stage.message}
                 </p>
               )}
               {isComplete && stage.startedAt !== null && stage.endedAt !== null && (
-                <p className="mt-1 font-mono text-[10px] tabular text-paper-mute/85">
+                <p className="mt-1 font-mono text-[10px] tabular text-fg-muted/85">
                   {((stage.endedAt - stage.startedAt) / 1000).toFixed(1)}s
                 </p>
               )}
             </div>
 
-            {/* Active stage progress bar — cinnabar fill along the bottom edge */}
+            {/* Active stage progress bar — cyan fill along the bottom edge */}
             {isActive && stage.progress !== null && (
               <span
                 aria-hidden
-                className="absolute bottom-0 left-0 h-px bg-cinnabar transition-[width] duration-500"
+                className="absolute bottom-0 left-0 h-px bg-cyan transition-[width] duration-500"
                 style={{
                   width: `${Math.max(2, Math.min(100, stage.progress * 100))}%`,
                 }}

@@ -9,7 +9,7 @@ import { PreviewProvider } from "./lib/preview-context.js";
 import { DEFAULT_CONFIG, type AppConfig, type ThemeId } from "./lib/types.js";
 
 /**
- * Atelier Noir shell.
+ * Composio shell.
  *
  * Owns: grain overlay, top chrome, route outlet, and the global Cmd+K
  * search palette. Routes own their own internal layout (left rail,
@@ -106,7 +106,7 @@ export function App() {
 
   if (!checked) {
     return (
-      <div className="grain flex h-screen w-screen items-center justify-center bg-ink">
+      <div className="grain flex h-screen w-screen items-center justify-center bg-void">
         <Pulse size="md" />
       </div>
     );
@@ -114,7 +114,7 @@ export function App() {
 
   return (
     <PreviewProvider>
-      <div className="grain flex h-screen w-screen flex-col bg-ink text-paper">
+      <div className="grain flex h-screen w-screen flex-col bg-void text-fg">
         <TopChrome theme={theme} onThemeChange={setTheme} />
         <div className="flex-1 overflow-hidden">
           <Outlet />

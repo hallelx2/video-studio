@@ -34,11 +34,11 @@ export function SlashCommandMenu({
         role="dialog"
         className={cn(
           "absolute bottom-full left-0 right-0 z-30 mb-2 origin-bottom",
-          "rounded-xl border border-paper-mute/15 bg-ink-raised shadow-2xl shadow-ink/80",
+          "rounded-xl border border-fg-muted/15 bg-surface shadow-2xl shadow-void/80",
           "enter-rise"
         )}
       >
-        <p className="px-4 py-4 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+        <p className="px-4 py-4 text-center font-mono text-[10px] uppercase tracking-widest text-fg-muted">
           no matching commands
         </p>
       </div>
@@ -51,15 +51,15 @@ export function SlashCommandMenu({
       onMouseLeave={() => undefined}
       className={cn(
         "absolute bottom-full left-0 right-0 z-30 mb-2 max-w-[520px] origin-bottom",
-        "rounded-xl border border-paper-mute/15 bg-ink-raised shadow-2xl shadow-ink/80",
+        "rounded-xl border border-fg-muted/15 bg-surface shadow-2xl shadow-void/80",
         "enter-rise"
       )}
     >
-      <header className="flex items-center justify-between border-b border-paper-mute/10 px-4 py-2.5">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <header className="flex items-center justify-between border-b border-fg-muted/10 px-4 py-2.5">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
           commands · {commands.length}
         </span>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/80">
           ↑↓ nav · ⏎ run · esc close
         </span>
       </header>
@@ -74,32 +74,32 @@ export function SlashCommandMenu({
                 onClick={() => onSelect(cmd)}
                 className={cn(
                   "flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
-                  isActive ? "bg-ink-edge" : "hover:bg-ink-edge/60"
+                  isActive ? "bg-elevated" : "hover:bg-elevated/60"
                 )}
               >
                 <span
                   className={cn(
                     "shrink-0 font-mono text-xs",
-                    isActive ? "text-cinnabar" : "text-paper-mute"
+                    isActive ? "text-cyan" : "text-fg-muted"
                   )}
                 >
                   /
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-mono text-sm text-paper">
+                  <span className="block truncate font-mono text-sm text-fg">
                     {cmd.name}
                     {cmd.aliases && cmd.aliases.length > 0 && (
-                      <span className="ml-2 text-[10px] text-paper-mute/85">
+                      <span className="ml-2 text-[10px] text-fg-muted/85">
                         {cmd.aliases.map((a) => `/${a}`).join("  ")}
                       </span>
                     )}
                   </span>
-                  <span className="mt-0.5 block truncate font-sans text-[12px] text-paper-mute">
+                  <span className="mt-0.5 block truncate font-sans text-[12px] text-fg-muted">
                     {cmd.description}
                   </span>
                 </span>
                 {cmd.hint && (
-                  <span className="shrink-0 rounded-md border border-paper-mute/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                  <span className="shrink-0 rounded-md border border-fg-muted/15 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
                     {cmd.hint}
                   </span>
                 )}

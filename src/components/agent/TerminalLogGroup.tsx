@@ -1,15 +1,19 @@
 import { useState, type ReactNode } from "react";
+import { Terminal, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "../../lib/cn.js";
+import { StreamRow, RowLabel, RowBadge } from "./StreamRow.js";
 
 /**
- * Render a contiguous run of agent_log lines as one terminal-like block —
- * dark background, mono font, ANSI color codes parsed into colored spans
- * so output from `npx hyperframes tts` / `npx hyperframes preview` /
- * stderr looks like the actual terminal it came from instead of plain
- * scattered rows.
+ * Render a contiguous run of agent_log lines as one terminal pane — dark
+ * surface background, mono font, ANSI escape sequences parsed into colored
+ * spans so output from `npx hyperframes tts` / `preview` / stderr looks like
+ * the actual terminal it came from instead of plain scattered rows.
  *
- * Collapsible: shows the last 8 lines by default with a "show all N"
- * expander so a 60-line TTS run doesn't dominate the activity stream.
+ * Wrapped in a StreamRow header so the terminal sits inside the same grid
+ * as every other event. The inner pane is a self-contained, framed surface
+ * with three small "window dots" hinting at terminal-window provenance,
+ * generous internal padding, and a centered hidden-lines indicator that
+ * reads as part of the output rather than chrome.
  */
 export function TerminalLogGroup({
   level,
@@ -26,44 +30,79 @@ export function TerminalLogGroup({
   const hidden = lines.length - visible.length;
 
   return (
-    <article className="hairline overflow-hidden rounded border border-paper-mute/15 bg-[#0E0E10]">
-      <header className="flex items-center justify-between gap-3 border-b border-paper-mute/15 bg-[#16161A] px-3 py-1.5">
-        <div className="flex items-baseline gap-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-            terminal · {level}
-          </span>
-          <span className="font-mono text-[10px] tabular text-paper-mute/80">
-            {lines.length} line{lines.length === 1 ? "" : "s"}
-          </span>
-        </div>
-        {isLong && (
+    <StreamRow
+      tone="muted"
+      icon={<Terminal className="h-3.5 w-3.5" strokeWidth={1.75} />}
+      header={
+        <span className="flex min-w-0 items-baseline gap-2.5">
+          <RowLabel tone="muted">terminal</RowLabel>
+          <span className="font-mono text-[10px] text-fg-muted/70">·</span>
+          <span className="font-mono text-[11px] tracking-tight text-fg-muted">{level}</span>
+          <RowBadge tone="muted">
+            {lines.length} {lines.length === 1 ? "line" : "lines"}
+          </RowBadge>
+        </span>
+      }
+      status={
+        isLong ? (
           <button
-            onClick={() => setExpanded((v) => !v)}
-            className="font-mono text-[10px] uppercase tracking-widest text-paper-mute hover:text-paper"
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded((v) => !v);
+            }}
+            className="inline-flex items-center gap-1.5 rounded border border-mist-08 px-2 py-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted transition-colors hover:border-mist-12 hover:bg-mist-04 hover:text-fg"
+            title={expanded ? "Collapse to last 8 lines" : `Show all ${lines.length} lines`}
           >
-            {expanded ? "collapse ▴" : `show all ${lines.length} ▾`}
+            {expanded ? (
+              <>
+                <ChevronUp className="h-3 w-3" strokeWidth={1.75} aria-hidden />
+                collapse
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-3 w-3" strokeWidth={1.75} aria-hidden />
+                show all
+              </>
+            )}
           </button>
+        ) : undefined
+      }
+    >
+      {/* ── Terminal pane ──────────────────────────────────────────────────
+          The StreamRow's icon + "TERMINAL · {level}" header already
+          establishes terminal context, so we don't need a redundant
+          window-chrome strip on the inner pane. Just a clean framed pre
+          with an optional hidden-lines indicator. Reads light for one-line
+          output, holds together for long traces. */}
+      <div className="mt-2 overflow-hidden rounded border border-mist-10 bg-surface">
+        {/* Hidden-lines indicator — centered ellipsis with leading and
+            trailing hairlines so it reads as part of the output rather
+            than as a separate UI control. */}
+        {hidden > 0 && (
+          <div className="flex items-center justify-center gap-3 border-b border-mist-06 bg-void/30 px-3 py-1.5">
+            <span aria-hidden className="h-px w-12 bg-mist-08" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-fg-muted/65">
+              {hidden} earlier {hidden === 1 ? "line" : "lines"} hidden
+            </span>
+            <span aria-hidden className="h-px w-12 bg-mist-08" />
+          </div>
         )}
-      </header>
-      {hidden > 0 && (
-        <p className="border-b border-paper-mute/10 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-paper-mute/70">
-          {hidden} earlier line{hidden === 1 ? "" : "s"} hidden
-        </p>
-      )}
-      <pre
-        className={cn(
-          "max-h-72 overflow-auto px-3 py-2 font-mono text-[11px] leading-[1.55] text-[#D4D4D4]",
-          // No word-wrap — terminal lines stay on one line and the user
-          // scrolls horizontally if a path is too long. Matches what a
-          // real terminal does.
-          "whitespace-pre"
-        )}
-      >
-        {visible.map((line, i) => (
-          <div key={i}>{ansiToReact(line)}</div>
-        ))}
-      </pre>
-    </article>
+
+        {/* Lines — generous padding, comfortable leading. Horizontal scroll
+            preserves real-terminal behavior on long paths instead of
+            wrapping mid-line. */}
+        <pre
+          className={cn(
+            "max-h-72 overflow-auto px-4 py-3 font-mono text-[11.5px] leading-[1.7] text-fg/85",
+            "whitespace-pre"
+          )}
+        >
+          {visible.map((line, i) => (
+            <div key={i}>{ansiToReact(line)}</div>
+          ))}
+        </pre>
+      </div>
+    </StreamRow>
   );
 }
 
@@ -71,28 +110,33 @@ export function TerminalLogGroup({
 // Minimal SGR (Select Graphic Rendition) parser: handles the colors most
 // CLI tools actually emit (foreground 30–37 / 90–97, reset 0/39, bold 1).
 // Anything we don't recognise is consumed silently so the text is clean.
+//
+// Color choices favor the Composio cool palette — cyan for info, signal-blue
+// for paths, alarm-leaning for errors. Greens/yellows are kept for legacy CLI
+// signal-fidelity (success markers, warnings) but tuned to feel native on
+// the void canvas instead of a generic terminal palette.
 
 const ANSI_FG: Record<number, string> = {
-  30: "#4D4D52", // black (terminal-bg-tinted, not full black)
-  31: "#FF6B5A", // red — used by errors / failures
-  32: "#9CC79B", // green — success markers (Studio running, etc)
+  30: "#4D4D52", // black (terminal-bg-tinted)
+  31: "#FF6B5A", // red — errors / failures (alarm-leaning)
+  32: "#7BD9C4", // green — success markers (cyan-leaning, native to Composio)
   33: "#E5C07B", // yellow — warnings
-  34: "#7AA2C5", // blue — paths / URLs
+  34: "#0089FF", // blue — paths / URLs (signal-blue)
   35: "#C678DD", // magenta
-  36: "#56B6C2", // cyan — info
-  37: "#D4D4D4", // white (default fg)
-  90: "#7B7B82", // bright black / gray — used for spinners + dim text
+  36: "#00FFFF", // cyan — info (Electric Cyan)
+  37: "#FFFFFF", // white (default fg)
+  90: "rgb(255 255 255 / 0.40)", // bright black / gray — spinners, dim text
   91: "#FF8B7E",
-  92: "#B6E0B5",
+  92: "#A0EBD4",
   93: "#F0CD8E",
-  94: "#9BBDDA",
+  94: "#5BAEFF",
   95: "#D7A0E5",
   96: "#7DCCD7",
   97: "#FFFFFF",
 };
 
-const ESC = "";
-const ANSI_RE = /\[([0-9;]+)m|\[\?[0-9]+[hl]/g;
+const ESC = "";
+const ANSI_RE = /\[([0-9;]+)m|\[\?[0-9]+[hl]/g;
 
 interface SgrState {
   fg: string | null;
@@ -140,7 +184,6 @@ function ansiToReact(text: string): ReactNode {
   let cursor = 0;
   let state: SgrState = { fg: null, bold: false };
   let key = 0;
-  // Reset the regex so consecutive calls don't share state.
   ANSI_RE.lastIndex = 0;
   let match: RegExpExecArray | null;
   while ((match = ANSI_RE.exec(text)) !== null) {
@@ -153,12 +196,9 @@ function ansiToReact(text: string): ReactNode {
       );
     }
     if (match[1] !== undefined) {
-      // SGR sequence: e.g. "31;1" → fg red + bold
       const codes = match[1].split(";").map((s) => parseInt(s, 10) || 0);
       state = applyCodes(state, codes);
     }
-    // Cursor-control sequences match[0] starts with "[?" — silently
-    // dropped (no state change). Either way advance the cursor past them.
     cursor = ANSI_RE.lastIndex;
   }
   if (cursor < text.length) {

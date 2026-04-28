@@ -156,7 +156,7 @@ export function Composer(props: ComposerProps) {
   };
 
   return (
-    <div className="relative bg-ink px-10 pb-5 pt-3">
+    <div className="relative bg-void px-10 pb-5 pt-3">
       {/* Slash command palette — pops up when the user starts a / command */}
       {slashOpen && (
         <div className="absolute inset-x-10 bottom-full -translate-y-1">
@@ -173,19 +173,19 @@ export function Composer(props: ComposerProps) {
       {/* shadcn-style: single neutral border, soft ring on focus, no mode-tinted color */}
       <div
         className={cn(
-          "rounded-2xl border bg-ink-raised transition-colors",
+          "rounded-2xl border bg-surface transition-colors",
           focused
-            ? "border-paper-mute/30 ring-2 ring-paper-mute/10"
-            : "border-paper-mute/15 hover:border-paper-mute/25"
+            ? "border-fg-muted/30 ring-2 ring-fg-muted/10"
+            : "border-fg-muted/15 hover:border-fg-muted/25"
         )}
       >
         {/* Top row: model picker (and any future toolbar items) */}
-        <div className="flex items-center justify-between border-b border-paper-mute/10 px-4 py-2.5">
+        <div className="flex items-center justify-between border-b border-fg-muted/10 px-4 py-2.5">
           <div className="flex items-center gap-2">
             <ModelPicker modelId={props.modelId} onChange={props.onModelChange} />
             <PersonaPicker personaId={props.personaId} onChange={props.onPersonaChange} />
           </div>
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/80">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/80">
             {modeLabel(mode)}
           </span>
         </div>
@@ -203,25 +203,25 @@ export function Composer(props: ComposerProps) {
             rows={1}
             disabled={submitting}
             className={cn(
-              "block w-full resize-none bg-transparent font-sans text-base leading-relaxed text-paper placeholder:text-paper-mute/55 focus:outline-none",
+              "block w-full resize-none bg-transparent font-sans text-base leading-relaxed text-fg placeholder:text-fg-muted/55 focus:outline-none",
               "min-h-[24px]"
             )}
           />
         </div>
 
         {/* Bottom row: hint on the left, actions on the right */}
-        <div className="flex items-center justify-between gap-4 border-t border-paper-mute/10 px-4 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+        <div className="flex items-center justify-between gap-4 border-t border-fg-muted/10 px-4 py-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
             {hint}
           </span>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/45">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/45">
               ⌘⏎
             </span>
             {showStop && (
               <button
                 onClick={() => props.onStop()}
-                className="rounded-md border border-paper-mute/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:border-paper-mute/30 hover:text-paper"
+                className="rounded-md border border-fg-muted/15 px-2.5 py-1 font-mono text-[10px] uppercase tracking-widest text-fg-muted transition-colors hover:border-fg-muted/30 hover:text-fg"
                 title="Stop the agent (⌘.)"
               >
                 stop
@@ -233,8 +233,8 @@ export function Composer(props: ComposerProps) {
               className={cn(
                 "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
                 canSubmit
-                  ? "bg-paper text-ink hover:bg-paper/90"
-                  : "cursor-not-allowed bg-paper-mute/10 text-paper-mute/40"
+                  ? "bg-fg text-void hover:bg-fg/90"
+                  : "cursor-not-allowed bg-fg-muted/10 text-fg-muted/40"
               )}
             >
               {submitButtonLabel(mode)}

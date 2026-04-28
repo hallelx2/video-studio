@@ -3,23 +3,28 @@ import { cn } from "../../lib/cn.js";
 
 /**
  * Animated swap between an "active" verb (Reading…) and a "done" verb (Read).
- * Inspired by OpenCode's ToolStatusTitle. The shared prefix doesn't move; only
- * the tail flips so the eye stays anchored.
+ * The shared prefix doesn't move; only the tail flips so the eye stays anchored.
  *
- * No layout-thrashing measure-and-resize loop — we just inline-block the two
- * spans and let CSS transition handle the visual swap. Crisp on cheap hardware
- * and avoids any flash of wrong text.
+ * Shimmer support is split: pass a separate `runningClassName` that applies
+ * ONLY when active, ONLY to the prefix and active-tail leaf spans. Background-
+ * clip:text on a `text-shimmer-*` class is leaf-text-clean — applying it to
+ * the inline-flex wrapper let the gradient leak past the text and read as
+ * "the whole row is shimmering". Now the gradient hugs the verb only.
  */
 export function ToolStatusTitle({
   active,
   activeText,
   doneText,
   className,
+  runningClassName,
 }: {
   active: boolean;
   activeText: string;
   doneText: string;
+  /** Always-applied typography (size, color, weight). Stays on the wrapper. */
   className?: string;
+  /** Applied to leaf text spans only when `active=true` (e.g. text-shimmer-cyan). */
+  runningClassName?: string;
 }) {
   const { prefix, activeTail, doneTail } = useMemo(
     () => splitCommonPrefix(activeText, doneText),
@@ -29,14 +34,15 @@ export function ToolStatusTitle({
   return (
     <span
       data-active={active ? "true" : "false"}
-      className={cn("inline-flex items-baseline whitespace-pre", className)}
+      className={cn("relative inline-flex items-baseline whitespace-pre", className)}
       aria-label={active ? activeText : doneText}
     >
-      {prefix && <span>{prefix}</span>}
+      {prefix && <span className={cn(active && runningClassName)}>{prefix}</span>}
       <span
         className={cn(
-          "transition-opacity duration-300 ease-[var(--ease-atelier)]",
-          active ? "opacity-100" : "absolute -translate-x-px opacity-0"
+          "transition-opacity duration-300 ease-[var(--ease-composio)]",
+          active ? "opacity-100" : "absolute -translate-x-px opacity-0",
+          active && runningClassName
         )}
         aria-hidden={!active}
       >
@@ -44,7 +50,7 @@ export function ToolStatusTitle({
       </span>
       <span
         className={cn(
-          "transition-opacity duration-300 ease-[var(--ease-atelier)]",
+          "transition-opacity duration-300 ease-[var(--ease-composio)]",
           active ? "absolute -translate-x-px opacity-0" : "opacity-100"
         )}
         aria-hidden={active}

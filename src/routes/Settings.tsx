@@ -75,8 +75,8 @@ export function SettingsRoute() {
 
   if (!config) {
     return (
-      <div className="grain flex h-full items-center justify-center bg-ink">
-        <span className="pulse-cinnabar h-2 w-2 rounded-full bg-cinnabar" />
+      <div className="grain flex h-full items-center justify-center bg-void">
+        <span className="pulse-cyan h-2 w-2 rounded-full bg-cyan" />
       </div>
     );
   }
@@ -123,13 +123,13 @@ export function SettingsRoute() {
     <div className="flex h-full flex-col overflow-hidden">
       <header className="hairline flex items-center justify-between border-b px-12 py-8">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
             configuration · {config.profileName || "default"}
           </p>
-          <h1 className="display-sm mt-2 text-4xl text-paper">Settings</h1>
+          <h1 className="display-sm mt-2 text-4xl text-fg">Settings</h1>
         </div>
         <div className="flex items-center gap-6">
-          <Link to="/" className="text-sm text-paper-mute transition-colors hover:text-paper">
+          <Link to="/" className="text-sm text-fg-muted transition-colors hover:text-fg">
             ← back
           </Link>
           <button
@@ -138,10 +138,10 @@ export function SettingsRoute() {
             className={cn(
               "border-b pb-1 text-sm font-medium transition-colors",
               saving
-                ? "cursor-not-allowed border-paper-mute/30 text-paper-mute/50"
+                ? "cursor-not-allowed border-fg-muted/30 text-fg-muted/50"
                 : savedAt
-                  ? "border-paper text-paper"
-                  : "border-cinnabar text-cinnabar hover:text-paper"
+                  ? "border-fg text-fg"
+                  : "border-cyan text-cyan hover:text-fg"
             )}
           >
             {savedAt ? "saved ✓" : saving ? "saving…" : "save changes →"}
@@ -152,7 +152,7 @@ export function SettingsRoute() {
       <div className="flex flex-1 overflow-hidden">
         {/* ─── Tab rail ─────────────────────────────────────────────────── */}
         <aside className="hairline w-64 shrink-0 overflow-y-auto border-r px-6 py-10">
-          <p className="mb-4 px-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+          <p className="mb-4 px-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
             sections
           </p>
           <ul className="space-y-0.5">
@@ -165,20 +165,20 @@ export function SettingsRoute() {
                     className={cn(
                       "block w-full rounded px-3 py-2.5 text-left transition-colors",
                       isActive
-                        ? "bg-ink-raised text-paper"
-                        : "text-paper-mute hover:bg-ink-edge hover:text-paper"
+                        ? "bg-surface text-fg"
+                        : "text-fg-muted hover:bg-elevated hover:text-fg"
                     )}
                   >
                     <span className="flex items-center gap-3">
                       <span
                         className={cn(
                           "h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
-                          isActive ? "bg-cinnabar" : "bg-paper-mute/30"
+                          isActive ? "bg-cyan" : "bg-fg-muted/30"
                         )}
                       />
                       <span className="text-sm font-medium">{tab.label}</span>
                     </span>
-                    <span className="ml-[18px] mt-0.5 block text-[11px] leading-snug text-paper-mute/70">
+                    <span className="ml-[18px] mt-0.5 block text-[11px] leading-snug text-fg-muted/70">
                       {tab.description}
                     </span>
                   </button>
@@ -202,8 +202,8 @@ export function SettingsRoute() {
                     className={cn(
                       "border-b pb-0.5 font-mono text-[10px] uppercase tracking-widest transition-colors",
                       healthLoading
-                        ? "cursor-not-allowed border-paper-mute/30 text-paper-mute/40"
-                        : "border-cinnabar text-cinnabar hover:text-paper"
+                        ? "cursor-not-allowed border-fg-muted/30 text-fg-muted/40"
+                        : "border-cyan text-cyan hover:text-fg"
                     )}
                   >
                     {healthLoading ? "checking…" : "re-check"}
@@ -211,7 +211,7 @@ export function SettingsRoute() {
                 }
               >
                 {health ? (
-                  <ul className="grid grid-cols-1 gap-px overflow-hidden rounded border border-brass-line bg-brass-line">
+                  <ul className="grid grid-cols-1 gap-px overflow-hidden rounded border border-mist-10 bg-mist-10">
                     {health.entries.map((entry) => (
                       <li key={entry.key}>
                         <HealthRow entry={entry} />
@@ -219,7 +219,7 @@ export function SettingsRoute() {
                     ))}
                   </ul>
                 ) : (
-                  <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
                     {healthLoading ? "checking…" : "no report yet"}
                   </p>
                 )}
@@ -240,8 +240,8 @@ export function SettingsRoute() {
                 <Section eyebrow="02" title="Theme">
                   <RadioGrid
                     options={[
-                      { id: "noir", label: "Atelier Noir", description: "Deep ink canvas. The default." },
-                      { id: "creme", label: "Atelier Crème", description: "Warm paper canvas. Same identity in daylight." },
+                      { id: "noir", label: "Composio Dark", description: "Pitch-black canvas. The default." },
+                      { id: "creme", label: "Composio Daylight", description: "Warm paper canvas. Same identity in daylight." },
                     ]}
                     activeId={config.theme}
                     onPick={(id) => update("theme", id as ThemeId)}
@@ -367,7 +367,7 @@ export function SettingsRoute() {
                 >
                   <div className="space-y-4">
                     <div>
-                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
                         Quality
                       </p>
                       <RadioGrid
@@ -381,7 +381,7 @@ export function SettingsRoute() {
                       />
                     </div>
                     <div>
-                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+                      <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
                         FPS
                       </p>
                       <div className="flex gap-2">
@@ -392,8 +392,8 @@ export function SettingsRoute() {
                             className={cn(
                               "rounded border px-4 py-2 font-mono text-xs tabular transition-colors",
                               config.renderFps === fps
-                                ? "border-cinnabar bg-cinnabar/10 text-cinnabar"
-                                : "border-paper-mute/15 text-paper hover:border-paper-mute/30"
+                                ? "border-cyan bg-cyan/10 text-cyan"
+                                : "border-fg-muted/15 text-fg hover:border-fg-muted/30"
                             )}
                           >
                             {fps}
@@ -461,15 +461,15 @@ function Section({
       <header className="mb-6 flex items-end justify-between gap-6">
         <div className="min-w-0 flex-1">
           {eyebrow && (
-            <p className="font-mono text-[10px] uppercase tracking-widest text-cinnabar">
+            <p className="font-mono text-[10px] uppercase tracking-widest text-cyan">
               {eyebrow}
             </p>
           )}
-          <h2 className={cn("display-sm text-2xl text-paper", eyebrow && "mt-2")}>
+          <h2 className={cn("display-sm text-2xl text-fg", eyebrow && "mt-2")}>
             {title}
           </h2>
           {description && (
-            <p className="mt-2 max-w-prose text-xs leading-relaxed text-paper-mute">
+            <p className="mt-2 max-w-prose text-xs leading-relaxed text-fg-muted">
               {description}
             </p>
           )}
@@ -484,30 +484,30 @@ function Section({
 function HealthRow({ entry }: { entry: HealthEntry }) {
   const tone = entry.ok ? "ok" : entry.required ? "alarm" : "warn";
   return (
-    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-ink px-4 py-3">
+    <div className="grid grid-cols-[auto_1fr_auto] items-center gap-4 bg-void px-4 py-3">
       <span
         className={cn(
           "h-2 w-2 rounded-full",
-          tone === "ok" && "bg-paper",
-          tone === "warn" && "bg-brass",
+          tone === "ok" && "bg-fg",
+          tone === "warn" && "bg-fg-faint",
           tone === "alarm" && "bg-alarm"
         )}
         aria-hidden
       />
       <span className="min-w-0">
         <span className="flex items-baseline gap-3">
-          <span className="text-sm font-medium text-paper">{entry.label}</span>
+          <span className="text-sm font-medium text-fg">{entry.label}</span>
           {!entry.required && (
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted/85">
               optional
             </span>
           )}
           {entry.version && (
-            <span className="font-mono text-[10px] tabular text-brass">v{entry.version}</span>
+            <span className="font-mono text-[10px] tabular text-fg-faint">v{entry.version}</span>
           )}
         </span>
         {entry.path && (
-          <span className="mt-0.5 block truncate font-mono text-[10px] text-paper-mute/85">
+          <span className="mt-0.5 block truncate font-mono text-[10px] text-fg-muted/85">
             {entry.path}
           </span>
         )}
@@ -515,7 +515,7 @@ function HealthRow({ entry }: { entry: HealthEntry }) {
           <span
             className={cn(
               "mt-1 block text-xs leading-relaxed",
-              entry.ok ? "text-paper-mute" : entry.required ? "text-alarm" : "text-brass"
+              entry.ok ? "text-fg-muted" : entry.required ? "text-alarm" : "text-fg-faint"
             )}
           >
             {entry.note}
@@ -525,8 +525,8 @@ function HealthRow({ entry }: { entry: HealthEntry }) {
       <span
         className={cn(
           "shrink-0 font-mono text-[10px] uppercase tracking-widest",
-          tone === "ok" && "text-paper",
-          tone === "warn" && "text-brass",
+          tone === "ok" && "text-fg",
+          tone === "warn" && "text-fg-faint",
           tone === "alarm" && "text-alarm"
         )}
       >
@@ -555,7 +555,7 @@ function RadioGrid({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-px overflow-hidden rounded border border-brass-line bg-brass-line">
+    <div className="grid grid-cols-1 gap-px overflow-hidden rounded border border-mist-10 bg-mist-10">
       {options.map((opt) => {
         const isActive = opt.id === activeId;
         return (
@@ -564,12 +564,12 @@ function RadioGrid({
             onClick={() => !opt.disabled && onPick(opt.id)}
             disabled={opt.disabled}
             className={cn(
-              "block bg-ink px-5 py-3 text-left transition-colors",
+              "block bg-void px-5 py-3 text-left transition-colors",
               opt.disabled
                 ? "cursor-not-allowed opacity-50"
                 : isActive
-                  ? "bg-ink-edge"
-                  : "hover:bg-ink-raised"
+                  ? "bg-elevated"
+                  : "hover:bg-surface"
             )}
           >
             <span className="flex items-baseline justify-between gap-4">
@@ -577,25 +577,25 @@ function RadioGrid({
                 <span
                   className={
                     isActive
-                      ? "h-1.5 w-1.5 rounded-full bg-cinnabar"
+                      ? "h-1.5 w-1.5 rounded-full bg-cyan"
                       : "h-1.5 w-1.5"
                   }
                 />
-                <span className="text-sm font-medium text-paper">{opt.label}</span>
+                <span className="text-sm font-medium text-fg">{opt.label}</span>
                 {opt.badge && (
-                  <span className="font-mono text-[10px] uppercase tracking-widest text-brass">
+                  <span className="font-mono text-[10px] uppercase tracking-widest text-fg-faint">
                     {opt.badge}
                   </span>
                 )}
               </span>
               {opt.tag && (
-                <span className="font-mono text-[10px] tabular text-paper-mute">
+                <span className="font-mono text-[10px] tabular text-fg-muted">
                   {opt.tag}
                 </span>
               )}
             </span>
             {opt.description && (
-              <span className="ml-[18px] mt-1 block text-xs leading-relaxed text-paper-mute">
+              <span className="ml-[18px] mt-1 block text-xs leading-relaxed text-fg-muted">
                 {opt.description}
               </span>
             )}
@@ -620,10 +620,10 @@ function PathRow({
   onClear?: () => void;
 }) {
   return (
-    <div className="hairline flex w-full items-center justify-between border bg-ink-raised px-5 py-4">
+    <div className="hairline flex w-full items-center justify-between border bg-surface px-5 py-4">
       <div className="block min-w-0 flex-1">
-        <span className="block text-sm font-medium text-paper">{label}</span>
-        <span className="mt-1 block truncate font-mono text-xs text-paper-mute">
+        <span className="block text-sm font-medium text-fg">{label}</span>
+        <span className="mt-1 block truncate font-mono text-xs text-fg-muted">
           {value ?? placeholder}
         </span>
       </div>
@@ -631,7 +631,7 @@ function PathRow({
         {value && onClear && (
           <button
             onClick={onClear}
-            className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-alarm"
+            className="font-mono text-[10px] uppercase tracking-widest text-fg-muted transition-colors hover:text-alarm"
             title="Clear and fall back to PATH auto-detection"
           >
             clear
@@ -639,7 +639,7 @@ function PathRow({
         )}
         <button
           onClick={onPick}
-          className="border-b border-cinnabar pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cinnabar transition-colors hover:text-paper"
+          className="border-b border-cyan pb-0.5 font-mono text-[10px] uppercase tracking-widest text-cyan transition-colors hover:text-fg"
         >
           {value ? "change →" : "pick →"}
         </button>
@@ -664,22 +664,22 @@ function Row({
   return (
     <button
       onClick={onPick}
-      className="hairline mb-2 flex w-full items-center justify-between border bg-ink-raised px-5 py-4 text-left transition-colors last:mb-0 hover:bg-ink-edge"
+      className="hairline mb-2 flex w-full items-center justify-between border bg-surface px-5 py-4 text-left transition-colors last:mb-0 hover:bg-elevated"
     >
       <span className="block min-w-0 flex-1">
         <span className="flex items-center gap-3">
-          <span className="text-sm font-medium text-paper">{label}</span>
+          <span className="text-sm font-medium text-fg">{label}</span>
           {required && (
-            <span className="font-mono text-[9px] uppercase tracking-widest text-cinnabar">
+            <span className="font-mono text-[9px] uppercase tracking-widest text-cyan">
               required
             </span>
           )}
         </span>
-        <span className="mt-1 block truncate font-mono text-xs text-paper-mute">
+        <span className="mt-1 block truncate font-mono text-xs text-fg-muted">
           {value ?? placeholder}
         </span>
       </span>
-      <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         change →
       </span>
     </button>
@@ -699,7 +699,7 @@ function TextField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <span className="mb-2 block font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         {label}
       </span>
       <input
@@ -707,7 +707,7 @@ function TextField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        className="hairline w-full border bg-ink-raised px-4 py-2.5 font-sans text-sm text-paper placeholder:text-paper-mute/55 focus:border-paper-mute/40 focus:outline-none"
+        className="hairline w-full border bg-surface px-4 py-2.5 font-sans text-sm text-fg placeholder:text-fg-muted/55 focus:border-fg-muted/40 focus:outline-none"
       />
     </label>
   );
@@ -730,7 +730,7 @@ function NumberField({
 }) {
   return (
     <label className="block">
-      <span className="mb-2 block font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <span className="mb-2 block font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         {label}
       </span>
       <input
@@ -742,10 +742,10 @@ function NumberField({
           const n = parseInt(e.target.value, 10);
           if (!Number.isNaN(n)) onChange(Math.max(min, Math.min(max, n)));
         }}
-        className="hairline w-32 border bg-ink-raised px-4 py-2.5 font-mono text-sm tabular text-paper focus:border-paper-mute/40 focus:outline-none"
+        className="hairline w-32 border bg-surface px-4 py-2.5 font-mono text-sm tabular text-fg focus:border-fg-muted/40 focus:outline-none"
       />
       {description && (
-        <span className="mt-2 block text-xs leading-relaxed text-paper-mute">
+        <span className="mt-2 block text-xs leading-relaxed text-fg-muted">
           {description}
         </span>
       )}
@@ -767,11 +767,11 @@ function ToggleRow({
   return (
     <button
       onClick={() => onChange(!value)}
-      className="hairline flex w-full items-start justify-between gap-6 border bg-ink-raised px-5 py-4 text-left transition-colors hover:bg-ink-edge"
+      className="hairline flex w-full items-start justify-between gap-6 border bg-surface px-5 py-4 text-left transition-colors hover:bg-elevated"
     >
       <span className="block min-w-0 flex-1">
-        <span className="text-sm font-medium text-paper">{label}</span>
-        <span className="mt-1 block text-xs leading-relaxed text-paper-mute">
+        <span className="text-sm font-medium text-fg">{label}</span>
+        <span className="mt-1 block text-xs leading-relaxed text-fg-muted">
           {description}
         </span>
       </span>
@@ -780,14 +780,14 @@ function ToggleRow({
         className={cn(
           "mt-1 inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors",
           value
-            ? "border-cinnabar bg-cinnabar/30"
-            : "border-paper-mute/30 bg-ink"
+            ? "border-cyan bg-cyan/30"
+            : "border-fg-muted/30 bg-void"
         )}
       >
         <span
           className={cn(
             "h-3.5 w-3.5 rounded-full transition-all",
-            value ? "ml-[18px] bg-cinnabar" : "ml-0.5 bg-paper-mute/60"
+            value ? "ml-[18px] bg-cyan" : "ml-0.5 bg-fg-muted/60"
           )}
         />
       </span>

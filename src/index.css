@@ -1,58 +1,83 @@
 @import "tailwindcss";
 
-/* ─── Atelier Noir — design tokens ─────────────────────────────────────────
+/* ─── Composio — design tokens ─────────────────────────────────────────────
  * Single source of color, type, motion, and texture for the desktop app.
  * Mirrors DESIGN.md — change there first, sync here.
+ *
+ * The palette: pitch-black canvas (Void Black) with content floating inside
+ * barely-visible white-opacity borders (mist-04..mist-12). Color is rationed
+ * — Electric Cyan and Composio Cobalt reserved for the agent's heartbeat,
+ * primary CTAs, and focus states. Dual fonts: geometric sans for content,
+ * JetBrains Mono for technical credibility.
  * ────────────────────────────────────────────────────────────────────────── */
 @theme {
-  /* Canvas */
-  --color-ink: #0A0A0B;
-  --color-ink-raised: #131316;
-  --color-ink-edge: #1C1C20;
+  /* Surfaces — the void canvas hierarchy */
+  --color-void: #0F0F0F;        /* page canvas — Void Black, warmer than pure */
+  --color-surface: #000000;     /* card interiors — Pure Black */
+  --color-elevated: #2C2C2C;    /* hover / raised surface — Charcoal */
 
-  /* Type */
-  --color-paper: #EDE7DC;
-  /* Paper-mute brightened from #A39E92 → #B8B2A4 to lift muted text out of
-   * the noise floor. Old token was 4.4:1 against #0A0A0B (passes AA but felt
-   * murky in real use); new token is 6.1:1 — squarely AAA-level for body. */
-  --color-paper-mute: #B8B2A4;
+  /* Foreground — monochrome ladder */
+  --color-fg: #FFFFFF;                       /* primary text — Pure White */
+  --color-fg-muted: rgb(255 255 255 / 0.60); /* secondary — Ghost White */
+  --color-fg-faint: rgb(255 255 255 / 0.50); /* tertiary — Whisper White */
+  --color-fg-ghost: rgb(255 255 255 / 0.20); /* phantom — Phantom White */
 
-  /* Accents */
-  --color-brass: #C9A96E;
-  --color-brass-line: rgb(201 169 110 / 0.15);
-  --color-cinnabar: #FF5E3A;
-  --color-cinnabar-glow: rgb(255 94 58 / 0.20);
-  --color-alarm: #E83A3A;
+  /* Borders — the white-opacity containment system */
+  --color-mist-04: rgb(255 255 255 / 0.04);  /* atmospheric */
+  --color-mist-06: rgb(255 255 255 / 0.06);  /* near-invisible */
+  --color-mist-08: rgb(255 255 255 / 0.08);  /* secondary */
+  --color-mist-10: rgb(255 255 255 / 0.10);  /* standard — workhorse */
+  --color-mist-12: rgb(255 255 255 / 0.12);  /* prominent edges */
+
+  /* Accents — the bioluminescent palette */
+  --color-cobalt: #0007CD;                /* brand — Composio Cobalt */
+  --color-cyan: #00FFFF;                  /* the heartbeat — Electric Cyan */
+  --color-cyan-glow: rgb(0 255 255 / 0.12); /* glowing fills, halos */
+  --color-signal: #0089FF;                /* focus rings, interactive borders */
+  --color-ocean: #0096FF;                 /* CTA accent borders */
+
+  /* Semantic */
+  --color-alarm: #E83A3A;                 /* errors only */
 
   /* Type families */
-  --font-display: "Fraunces", Georgia, "Times New Roman", serif;
-  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-display: "abcDiatype", "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "abcDiatype", "Geist", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
-  /* Motion — the Atelier ease */
-  --ease-atelier: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Motion — the Composio ease */
+  --ease-composio: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ─── Atelier Crème — light theme overrides ────────────────────────────────
- * Same Atelier identity, daylight canvas. Activated by setting
+/* ─── Composio Daylight — light theme overrides ────────────────────────────
+ * Same Composio identity, daylight canvas. Activated by setting
  * `data-theme="creme"` on <html> (App.tsx wires this from AppConfig).
- * Cinnabar drops slightly toward a deeper red for AAA contrast on paper;
- * brass deepens for legibility on a light surface; ink becomes a near-black
- * for type. Film grain switches to multiply so it darkens rather than
- * lightens the page.
+ *
+ * Cobalt deepens slightly; cyan goes a touch darker for AAA contrast on
+ * paper; the mist border system inverts to use black opacity instead of white.
+ * Film grain switches to multiply so noise darkens rather than lightens.
  * ────────────────────────────────────────────────────────────────────────── */
 [data-theme="creme"] {
-  --color-ink: #F4EFE6;          /* warm paper canvas */
-  --color-ink-raised: #EDE7DC;   /* card / raised surface */
-  --color-ink-edge: #E2DBCE;     /* hover / active surface */
-  --color-paper: #15110C;        /* near-black ink type */
-  /* Lifted from #6B6457 → #5A5448 for stronger contrast on the cream canvas
-   * (8.6:1 against --color-ink) so muted body copy remains crisp. */
-  --color-paper-mute: #5A5448;
-  --color-brass: #8C6F2E;        /* deeper for contrast on light */
-  --color-brass-line: rgb(140 111 46 / 0.20);
-  --color-cinnabar: #C53D17;     /* slightly darker for AAA on paper */
-  --color-cinnabar-glow: rgb(197 61 23 / 0.18);
+  --color-void: #F4EFE6;        /* warm paper canvas */
+  --color-surface: #FFFFFF;     /* card surface — pure white */
+  --color-elevated: #E8E2D6;    /* hover / raised */
+
+  --color-fg: #0A0A0B;                      /* near-black ink type */
+  --color-fg-muted: rgb(10 10 11 / 0.65);   /* secondary on light */
+  --color-fg-faint: rgb(10 10 11 / 0.45);   /* tertiary on light */
+  --color-fg-ghost: rgb(10 10 11 / 0.20);   /* phantom on light */
+
+  --color-mist-04: rgb(10 10 11 / 0.04);
+  --color-mist-06: rgb(10 10 11 / 0.06);
+  --color-mist-08: rgb(10 10 11 / 0.08);
+  --color-mist-10: rgb(10 10 11 / 0.10);
+  --color-mist-12: rgb(10 10 11 / 0.14);
+
+  --color-cobalt: #0007CD;
+  --color-cyan: #00B8B8;          /* darker cyan for AAA on paper */
+  --color-cyan-glow: rgb(0 184 184 / 0.15);
+  --color-signal: #0066CC;
+  --color-ocean: #0077DD;
+
   --color-alarm: #B82626;
   color-scheme: light;
 }
@@ -61,9 +86,9 @@
 :root {
   color-scheme: dark;
   font-family: var(--font-sans);
-  font-feature-settings: "ss01", "cv11"; /* Geist stylistic alternates */
-  background: var(--color-ink);
-  color: var(--color-paper);
+  font-feature-settings: "ss01", "cv11"; /* Geist stylistic alternates (no-op for abcDiatype) */
+  background: var(--color-void);
+  color: var(--color-fg);
   letter-spacing: -0.01em;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
@@ -74,7 +99,7 @@
 html, body, #root {
   height: 100%;
   margin: 0;
-  background: var(--color-ink);
+  background: var(--color-void);
 }
 
 body {
@@ -82,8 +107,8 @@ body {
 }
 
 ::selection {
-  background: var(--color-cinnabar);
-  color: var(--color-ink);
+  background: var(--color-cyan);
+  color: var(--color-void);
 }
 
 /* Numerical data is column-aligned everywhere — non-negotiable per DESIGN.md */
@@ -98,7 +123,8 @@ samp {
 
 /* ─── Film grain overlay ───────────────────────────────────────────────────
  * SVG noise at 4% opacity, fixed, full viewport, blend overlay.
- * Always on. The app should never feel "clean" — it has texture.
+ * Subtle texture so the dark canvas never feels flat — but restrained,
+ * matching the "developer terminal" rather than "marketing artifact" mood.
  * ────────────────────────────────────────────────────────────────────────── */
 .grain::before {
   content: "";
@@ -106,38 +132,39 @@ samp {
   inset: 0;
   pointer-events: none;
   z-index: 9999;
-  opacity: 0.04;
+  opacity: 0.03;
   mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0.93 0 0 0 0 0.91 0 0 0 0 0.86 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   background-size: 200px 200px;
 }
 
-/* On the cream canvas, overlay blends too lightly — switch to multiply so
- * the noise reads as a faint darkening across the warm paper instead of
- * a wash that disappears. */
 [data-theme="creme"] .grain::before {
   mix-blend-mode: multiply;
-  opacity: 0.05;
+  opacity: 0.04;
 }
 
-/* ─── Cinnabar pulse — the agent's heartbeat ───────────────────────────── */
-@keyframes pulse-cinnabar {
+/* ─── Cyan pulse — the agent's heartbeat ──────────────────────────────────
+ * The bioluminescent signal that something is alive: render progress,
+ * active session, in-flight tool calls. Used sparingly — when it pulses,
+ * it means.
+ * ────────────────────────────────────────────────────────────────────────── */
+@keyframes pulse-cyan {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 1.0; }
 }
-.pulse-cinnabar {
-  animation: pulse-cinnabar 1.4s var(--ease-atelier) infinite;
+.pulse-cyan {
+  animation: pulse-cyan 1.4s var(--ease-composio) infinite;
 }
 
 /* ─── Focus rings ─────────────────────────────────────────────────────────── */
 *:focus { outline: none; }
 *:focus-visible {
-  outline: 1px solid var(--color-cinnabar);
+  outline: 1px solid var(--color-signal);
   outline-offset: 2px;
 }
 /* Form controls handle their own focus via parent containers — never paint a
- * cinnabar outline directly on inputs / textareas / selects. The Composer's
- * outer bubble shows the focus state in a softer paper-mute ring. */
+ * cyan/signal outline directly on inputs. The Composer's outer bubble shows
+ * the focus state via a softer mist ring. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible,
@@ -145,7 +172,7 @@ select:focus-visible,
   outline: none;
 }
 
-/* ─── Scrollbar — minimal, brass on hover ─────────────────────────────── */
+/* ─── Scrollbar — minimal, mist on hover ──────────────────────────────── */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
@@ -154,33 +181,49 @@ select:focus-visible,
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgb(201 169 110 / 0.10);
+  background: rgb(255 255 255 / 0.06);
   border-radius: 0;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgb(201 169 110 / 0.25);
+  background: rgb(255 255 255 / 0.18);
+}
+[data-theme="creme"] ::-webkit-scrollbar-thumb {
+  background: rgb(10 10 11 / 0.08);
+}
+[data-theme="creme"] ::-webkit-scrollbar-thumb:hover {
+  background: rgb(10 10 11 / 0.20);
 }
 
-/* ─── Display headings ─────────────────────────────────────────────────── */
+/* ─── Display headings ─────────────────────────────────────────────────────
+ * Composio compression: ultra-tight line-heights for compressed authority.
+ * Same geometric sans as body — no separate display family.
+ * ────────────────────────────────────────────────────────────────────────── */
 .display {
   font-family: var(--font-display);
-  font-weight: 600;
-  font-variation-settings: "opsz" 144;
-  letter-spacing: -0.02em;
-  line-height: 1.05;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 0.87; /* ultra-tight per Composio spec */
 }
 
 .display-sm {
   font-family: var(--font-display);
-  font-weight: 500;
-  font-variation-settings: "opsz" 72;
+  font-weight: 400;
   letter-spacing: -0.01em;
-  line-height: 1.15;
+  line-height: 1.00; /* tight */
 }
 
-/* ─── Hairline (1px brass at 15%) ─────────────────────────────────────── */
+/* ─── Hairline (1px mist-10 border) ───────────────────────────────────── */
 .hairline {
-  border-color: var(--color-brass-line);
+  border-color: var(--color-mist-10);
+}
+
+/* ─── Brutalist offset shadow ─────────────────────────────────────────────
+ * The signature 4px×4px hard-offset shadow. Used selectively on distinctive
+ * feature cards — never on body containers. Provides a raw, retro-computing
+ * counterweight to the otherwise sleek darkness.
+ * ────────────────────────────────────────────────────────────────────────── */
+.shadow-brutalist {
+  box-shadow: rgb(0 0 0 / 0.15) 4px 4px 0 0;
 }
 
 /* ─── Stagger entrance ─────────────────────────────────────────────────────
@@ -199,7 +242,7 @@ select:focus-visible,
 }
 .stagger-children > * {
   opacity: 0;
-  animation: stagger-in 0.42s var(--ease-atelier) forwards;
+  animation: stagger-in 0.42s var(--ease-composio) forwards;
 }
 .stagger-children > *:nth-child(1)  { animation-delay:   0ms; }
 .stagger-children > *:nth-child(2)  { animation-delay:  40ms; }
@@ -214,13 +257,13 @@ select:focus-visible,
   to { opacity: 1; transform: translateY(0); }
 }
 .enter-rise {
-  animation: fade-rise 0.5s var(--ease-atelier) both;
+  animation: fade-rise 0.5s var(--ease-composio) both;
 }
 
-/* ─── Text shimmer (Hypatia-style streaming cue) ──────────────────────────
- * Subtle horizontal sweep on text that's currently arriving. Used on
- * running tool names, in-flight assistant text, etc. NOT on body copy
- * — keep it for "this is being generated right now" signals only.
+/* ─── Text shimmer (streaming cue) ────────────────────────────────────────
+ * Subtle horizontal sweep on text currently arriving. Used on running
+ * tool names and in-flight assistant text. NOT on body copy — keep it for
+ * "this is being generated right now" signals only.
  * ────────────────────────────────────────────────────────────────────────── */
 @keyframes text-shimmer-sweep {
   0%   { background-position: -150% 0; }
@@ -229,11 +272,11 @@ select:focus-visible,
 .text-shimmer {
   background-image: linear-gradient(
     100deg,
-    var(--color-paper-mute) 0%,
-    var(--color-paper-mute) 35%,
-    var(--color-paper) 50%,
-    var(--color-paper-mute) 65%,
-    var(--color-paper-mute) 100%
+    var(--color-fg-muted) 0%,
+    var(--color-fg-muted) 35%,
+    var(--color-fg) 50%,
+    var(--color-fg-muted) 65%,
+    var(--color-fg-muted) 100%
   );
   background-size: 200% 100%;
   background-clip: text;
@@ -242,14 +285,14 @@ select:focus-visible,
   -webkit-text-fill-color: transparent;
   animation: text-shimmer-sweep 2.4s linear infinite;
 }
-.text-shimmer-cinnabar {
+.text-shimmer-cyan {
   background-image: linear-gradient(
     100deg,
-    var(--color-paper-mute) 0%,
-    var(--color-paper-mute) 35%,
-    var(--color-cinnabar) 50%,
-    var(--color-paper-mute) 65%,
-    var(--color-paper-mute) 100%
+    var(--color-fg-muted) 0%,
+    var(--color-fg-muted) 35%,
+    var(--color-cyan) 50%,
+    var(--color-fg-muted) 65%,
+    var(--color-fg-muted) 100%
   );
   background-size: 200% 100%;
   background-clip: text;

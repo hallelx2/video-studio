@@ -58,8 +58,8 @@ export function HomeRoute() {
 
   if (loading) {
     return (
-      <div className="grain flex h-full items-center justify-center bg-ink">
-        <span className="pulse-cinnabar h-2 w-2 rounded-full bg-cinnabar" />
+      <div className="grain flex h-full items-center justify-center bg-void">
+        <span className="pulse-cyan h-2 w-2 rounded-full bg-cyan" />
       </div>
     );
   }
@@ -72,35 +72,35 @@ export function HomeRoute() {
   const greeting = greetingForHour(new Date().getHours());
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto bg-ink">
+    <div className="flex h-full flex-col overflow-y-auto bg-void">
       <div className="mx-auto w-full max-w-5xl px-12 py-16">
         {/* ─── Greeting ──────────────────────────────────────────────── */}
         <header>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+          <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
             video studio · {projects.length} project{projects.length === 1 ? "" : "s"} ·{" "}
             {sessions.length} session{sessions.length === 1 ? "" : "s"}
           </p>
-          <h1 className="display mt-4 text-7xl text-paper">{greeting}.</h1>
-          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-paper-mute">
+          <h1 className="display mt-4 text-7xl text-fg">{greeting}.</h1>
+          <p className="mt-4 max-w-2xl text-lg leading-relaxed text-fg-muted">
             What should we make today?
           </p>
 
           <div className="mt-10 flex items-baseline gap-8">
             <Link
               to="/projects"
-              className="rounded-full bg-paper px-6 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper/90"
+              className="rounded-full bg-fg px-6 py-2.5 text-sm font-medium text-void transition-colors hover:bg-fg/90"
             >
               Browse projects
             </Link>
             <Link
               to="/playground"
-              className="border-b border-cinnabar pb-1 text-sm font-medium text-cinnabar transition-colors hover:text-paper"
+              className="border-b border-cyan pb-1 text-sm font-medium text-cyan transition-colors hover:text-fg"
             >
               Open playground →
             </Link>
             <Link
               to="/settings"
-              className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
+              className="font-mono text-[10px] uppercase tracking-widest text-fg-muted transition-colors hover:text-fg"
             >
               settings
             </Link>
@@ -110,21 +110,21 @@ export function HomeRoute() {
         {/* ─── Recent sessions ────────────────────────────────────────── */}
         <section className="mt-20">
           <header className="hairline flex items-baseline justify-between border-b pb-3">
-            <h2 className="display-sm text-2xl text-paper">Recent sessions</h2>
+            <h2 className="display-sm text-2xl text-fg">Recent sessions</h2>
             <Link
               to="/projects"
-              className="font-mono text-[10px] uppercase tracking-widest text-paper-mute transition-colors hover:text-paper"
+              className="font-mono text-[10px] uppercase tracking-widest text-fg-muted transition-colors hover:text-fg"
             >
               all sessions →
             </Link>
           </header>
           {recentSessions.length === 0 ? (
-            <p className="mt-6 max-w-xl text-sm leading-relaxed text-paper-mute">
+            <p className="mt-6 max-w-xl text-sm leading-relaxed text-fg-muted">
               You haven't started a session yet. Pick a project to begin, or open the
               playground for a one-off video without a project context.
             </p>
           ) : (
-            <ul className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded border border-brass-line bg-brass-line md:grid-cols-2">
+            <ul className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded border border-mist-10 bg-mist-10 md:grid-cols-2">
               {recentSessions.map((session) => (
                 <li key={`${session.projectId}/${session.id}`}>
                   <SessionCard session={session} />
@@ -137,12 +137,12 @@ export function HomeRoute() {
         {/* ─── Projects pinboard ──────────────────────────────────────── */}
         <section className="mt-20">
           <header className="hairline flex items-baseline justify-between border-b pb-3">
-            <h2 className="display-sm text-2xl text-paper">Your projects</h2>
-            <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+            <h2 className="display-sm text-2xl text-fg">Your projects</h2>
+            <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
               {projects.length} total
             </span>
           </header>
-          <ul className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded border border-brass-line bg-brass-line md:grid-cols-2 lg:grid-cols-3">
+          <ul className="mt-4 grid grid-cols-1 gap-px overflow-hidden rounded border border-mist-10 bg-mist-10 md:grid-cols-2 lg:grid-cols-3">
             {projects.slice(0, 9).map((project) => {
               const sessionCount = sessions.filter((s) => s.projectId === project.id).length;
               return (
@@ -156,7 +156,7 @@ export function HomeRoute() {
             <p className="mt-4 text-right">
               <Link
                 to="/projects"
-                className="font-mono text-[10px] uppercase tracking-widest text-cinnabar hover:text-paper"
+                className="font-mono text-[10px] uppercase tracking-widest text-cyan hover:text-fg"
               >
                 see all {projects.length} →
               </Link>
@@ -164,7 +164,7 @@ export function HomeRoute() {
           )}
         </section>
 
-        <p className="mt-20 text-center font-display text-sm italic text-paper-mute">
+        <p className="mt-20 text-center font-display text-sm italic text-fg-muted">
           ⌘K to search across every session.
         </p>
       </div>
@@ -190,19 +190,19 @@ function SessionCard({ session }: { session: SessionWithProject }) {
   return (
     <Link
       to={`/project/${session.projectId}?session=${session.id}`}
-      className="group flex h-full flex-col gap-2 bg-ink p-5 transition-colors hover:bg-ink-edge"
+      className="group flex h-full flex-col gap-2 bg-void p-5 transition-colors hover:bg-elevated"
     >
       <span className="flex items-baseline justify-between gap-3">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
           {session.projectName}
         </span>
-        <span className="font-mono text-[10px] tabular text-paper-mute">
+        <span className="font-mono text-[10px] tabular text-fg-muted">
           {relativeTime(session.updatedAt)}
         </span>
       </span>
-      <span className="display-sm truncate text-lg text-paper">{session.title}</span>
-      <span className="mt-auto flex items-baseline gap-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
-        <span className="text-brass">{videoTypeMeta?.label ?? session.scaffold.videoType}</span>
+      <span className="display-sm truncate text-lg text-fg">{session.title}</span>
+      <span className="mt-auto flex items-baseline gap-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
+        <span className="text-fg-faint">{videoTypeMeta?.label ?? session.scaffold.videoType}</span>
         <span className="tabular">{session.eventCount} events</span>
       </span>
     </Link>
@@ -219,23 +219,23 @@ function ProjectCard({
   return (
     <Link
       to={`/project/${project.id}`}
-      className="group flex h-full flex-col gap-2 bg-ink p-5 transition-colors hover:bg-ink-edge"
+      className="group flex h-full flex-col gap-2 bg-void p-5 transition-colors hover:bg-elevated"
     >
-      <span className="display-sm truncate text-lg text-paper">{project.name}</span>
+      <span className="display-sm truncate text-lg text-fg">{project.name}</span>
       {project.description && (
-        <span className="line-clamp-2 text-sm leading-relaxed text-paper-mute">
+        <span className="line-clamp-2 text-sm leading-relaxed text-fg-muted">
           {project.description}
         </span>
       )}
-      <span className="mt-auto flex items-baseline gap-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+      <span className="mt-auto flex items-baseline gap-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
         {sessionCount > 0 ? (
-          <span className="text-cinnabar">
+          <span className="text-cyan">
             <span className="tabular">{sessionCount}</span> session{sessionCount === 1 ? "" : "s"}
           </span>
         ) : (
           <span>no sessions</span>
         )}
-        {project.hasDesignDoc && <span className="text-brass">design.md</span>}
+        {project.hasDesignDoc && <span className="text-fg-faint">design.md</span>}
       </span>
     </Link>
   );
@@ -243,26 +243,26 @@ function ProjectCard({
 
 function FirstRunEmptyState() {
   return (
-    <div className="flex h-full items-center justify-center bg-ink px-12">
+    <div className="flex h-full items-center justify-center bg-void px-12">
       <div className="max-w-xl">
-        <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+        <p className="font-mono text-[10px] uppercase tracking-widest text-fg-muted">
           video studio · empty workshop
         </p>
-        <h1 className="display mt-4 text-6xl text-paper">No projects yet.</h1>
-        <p className="mt-6 max-w-lg text-base leading-relaxed text-paper-mute">
+        <h1 className="display mt-4 text-6xl text-fg">No projects yet.</h1>
+        <p className="mt-6 max-w-lg text-base leading-relaxed text-fg-muted">
           Point us at the folder that holds your product repos in Settings, or open the
           playground to make a video without a source project.
         </p>
         <div className="mt-10 flex items-baseline gap-8">
           <Link
             to="/settings"
-            className="rounded-full bg-paper px-6 py-2.5 text-sm font-medium text-ink transition-colors hover:bg-paper/90"
+            className="rounded-full bg-fg px-6 py-2.5 text-sm font-medium text-void transition-colors hover:bg-fg/90"
           >
             Open settings
           </Link>
           <Link
             to="/playground"
-            className="border-b border-cinnabar pb-1 text-sm font-medium text-cinnabar transition-colors hover:text-paper"
+            className="border-b border-cyan pb-1 text-sm font-medium text-cyan transition-colors hover:text-fg"
           >
             Open playground →
           </Link>

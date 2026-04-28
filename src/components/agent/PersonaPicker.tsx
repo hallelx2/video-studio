@@ -31,16 +31,16 @@ export function PersonaPicker({
           type="button"
           onClick={toggle}
           className={cn(
-            "flex items-center gap-2 rounded-full border border-paper-mute/15 bg-ink px-3 py-1.5",
-            "font-mono text-[11px] tracking-wide text-paper transition-colors",
-            "hover:border-paper-mute/30 hover:bg-ink-edge"
+            "flex items-center gap-2 rounded-full border border-fg-muted/15 bg-void px-3 py-1.5",
+            "font-mono text-[11px] tracking-wide text-fg transition-colors",
+            "hover:border-fg-muted/30 hover:bg-elevated"
           )}
           title="Persona / voice override"
         >
           <PersonaGlyph kind={active.id} />
           <span>{active.label}</span>
           <ChevronDown
-            className={cn("h-3 w-3 text-paper-mute transition-transform", open && "rotate-180")}
+            className={cn("h-3 w-3 text-fg-muted transition-transform", open && "rotate-180")}
           />
         </button>
       )}
@@ -65,12 +65,12 @@ function PersonaMenu({
 
   return (
     <div>
-      <header className="flex items-center gap-2 border-b border-paper-mute/10 px-4 py-3">
+      <header className="flex items-center gap-2 border-b border-fg-muted/10 px-4 py-3">
         <PersonaGlyph kind="founder" />
-        <span className="font-display text-sm font-semibold text-paper">Persona</span>
+        <span className="font-display text-sm font-semibold text-fg">Persona</span>
       </header>
 
-      <p className="px-4 py-2.5 font-mono text-[10px] leading-relaxed text-paper-mute">
+      <p className="px-4 py-2.5 font-mono text-[10px] leading-relaxed text-fg-muted">
         Each persona prepends a voice override to the agent's system prompt
         for the next run. Founder is the default.
       </p>
@@ -85,21 +85,21 @@ function PersonaMenu({
                 onClick={() => onPick(persona.id)}
                 className={cn(
                   "group flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left transition-colors",
-                  isActive ? "bg-ink-edge" : "hover:bg-ink-edge/60"
+                  isActive ? "bg-elevated" : "hover:bg-elevated/60"
                 )}
               >
                 <span className="mt-0.5 shrink-0">
                   {isActive ? (
-                    <DotMark className="h-3 w-3 text-cinnabar" />
+                    <DotMark className="h-3 w-3 text-cyan" />
                   ) : (
                     <PersonaGlyph kind={persona.id} />
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-sans text-sm text-paper">
+                  <span className="block truncate font-sans text-sm text-fg">
                     {persona.label}
                   </span>
-                  <span className="mt-0.5 block text-[11px] leading-relaxed text-paper-mute">
+                  <span className="mt-0.5 block text-[11px] leading-relaxed text-fg-muted">
                     {persona.description}
                   </span>
                 </span>
@@ -120,7 +120,7 @@ function PersonaGlyph({ kind }: { kind: PersonaOption["id"] | string }) {
     case "founder":
       // Crosshair / target — anchored, decisive
       return (
-        <svg viewBox="0 0 12 12" className={cn(className, "text-cinnabar")} aria-hidden>
+        <svg viewBox="0 0 12 12" className={cn(className, "text-cyan")} aria-hidden>
           <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
           <path d="M6 1.5V4 M6 8V10.5 M1.5 6H4 M8 6H10.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
           <circle cx="6" cy="6" r="1" fill="currentColor" />
@@ -129,7 +129,7 @@ function PersonaGlyph({ kind }: { kind: PersonaOption["id"] | string }) {
     case "conversational":
       // Two overlapping speech bubbles
       return (
-        <svg viewBox="0 0 12 12" className={cn(className, "text-brass")} aria-hidden>
+        <svg viewBox="0 0 12 12" className={cn(className, "text-fg-faint")} aria-hidden>
           <path
             d="M1.5 3 H 7.5 V 7 H 4 L 2.5 8.5 V 7 H 1.5 Z"
             stroke="currentColor"
@@ -149,7 +149,7 @@ function PersonaGlyph({ kind }: { kind: PersonaOption["id"] | string }) {
     case "technical":
       // Angle brackets
       return (
-        <svg viewBox="0 0 12 12" className={cn(className, "text-paper-mute")} aria-hidden>
+        <svg viewBox="0 0 12 12" className={cn(className, "text-fg-muted")} aria-hidden>
           <path
             d="M4 3 L 1.5 6 L 4 9 M 8 3 L 10.5 6 L 8 9"
             stroke="currentColor"
@@ -163,7 +163,7 @@ function PersonaGlyph({ kind }: { kind: PersonaOption["id"] | string }) {
     case "editorial":
       // Quotation marks
       return (
-        <svg viewBox="0 0 12 12" className={cn(className, "text-paper")} aria-hidden>
+        <svg viewBox="0 0 12 12" className={cn(className, "text-fg")} aria-hidden>
           <path
             d="M2 4 V 7 H 4 L 3.5 9 M 6.5 4 V 7 H 8.5 L 8 9"
             stroke="currentColor"
@@ -176,7 +176,7 @@ function PersonaGlyph({ kind }: { kind: PersonaOption["id"] | string }) {
       );
     default:
       return (
-        <svg viewBox="0 0 12 12" className={cn(className, "text-paper-mute")} aria-hidden>
+        <svg viewBox="0 0 12 12" className={cn(className, "text-fg-muted")} aria-hidden>
           <circle cx="6" cy="6" r="2.5" stroke="currentColor" strokeWidth="1.2" fill="none" />
         </svg>
       );

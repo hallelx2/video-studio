@@ -81,7 +81,7 @@ export function Popover({
             "absolute z-50 min-w-[280px] origin-top-left",
             sideClass,
             alignClass,
-            "rounded-xl border border-paper-mute/15 bg-ink-raised shadow-2xl shadow-ink/80",
+            "rounded-xl border border-fg-muted/15 bg-surface shadow-2xl shadow-void/80",
             "enter-rise",
             className
           )}

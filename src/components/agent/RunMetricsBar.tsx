@@ -47,14 +47,14 @@ export function RunMetricsBar({
   const tokens = totalUsageTokens(metrics.usage);
 
   return (
-    <footer className="hairline flex items-center justify-between border-t bg-ink px-12 py-3 font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+    <footer className="hairline flex items-center justify-between border-t bg-void px-12 py-3 font-mono text-[10px] uppercase tracking-widest text-fg-muted">
       <div className="flex items-center gap-6">
         <Status status={status} />
         <Field label="elapsed">
-          <span className="tabular text-paper">{formatDuration(elapsed)}</span>
+          <span className="tabular text-fg">{formatDuration(elapsed)}</span>
         </Field>
         <Field label="tools">
-          <span className="tabular text-paper">
+          <span className="tabular text-fg">
             {toolCallCount}
             {toolCallErrors > 0 && (
               <span className="ml-1 text-alarm">· {toolCallErrors} err</span>
@@ -62,7 +62,7 @@ export function RunMetricsBar({
           </span>
         </Field>
         <Field label="messages">
-          <span className="tabular text-paper">{assistantBlocks}</span>
+          <span className="tabular text-fg">{assistantBlocks}</span>
         </Field>
       </div>
 
@@ -70,14 +70,14 @@ export function RunMetricsBar({
         {tokens > 0 && (
           <>
             <Field label="in">
-              <span className="tabular text-paper">{formatTokens(metrics.usage.input_tokens)}</span>
+              <span className="tabular text-fg">{formatTokens(metrics.usage.input_tokens)}</span>
             </Field>
             <Field label="out">
-              <span className="tabular text-paper">{formatTokens(metrics.usage.output_tokens)}</span>
+              <span className="tabular text-fg">{formatTokens(metrics.usage.output_tokens)}</span>
             </Field>
             {(metrics.usage.cache_read_input_tokens ?? 0) > 0 && (
               <Field label="cache">
-                <span className="tabular text-brass">
+                <span className="tabular text-fg-faint">
                   {formatTokens(metrics.usage.cache_read_input_tokens)}
                 </span>
               </Field>
@@ -86,7 +86,7 @@ export function RunMetricsBar({
         )}
         {metrics.costUsd > 0 && (
           <Field label="cost">
-            <span className="tabular text-paper">${metrics.costUsd.toFixed(3)}</span>
+            <span className="tabular text-fg">${metrics.costUsd.toFixed(3)}</span>
           </Field>
         )}
       </div>
@@ -100,20 +100,20 @@ function Status({ status }: { status: RunStatus }) {
       <span
         className={cn(
           "h-1.5 w-1.5 rounded-full",
-          status === "running" && "pulse-cinnabar bg-cinnabar",
-          status === "awaiting_input" && "bg-cinnabar",
-          status === "complete" && "bg-paper",
+          status === "running" && "pulse-cyan bg-cyan",
+          status === "awaiting_input" && "bg-cyan",
+          status === "complete" && "bg-fg",
           status === "error" && "bg-alarm",
-          status === "idle" && "bg-paper-mute/40"
+          status === "idle" && "bg-fg-muted/40"
         )}
       />
       <span
         className={cn(
-          status === "running" && "text-cinnabar",
-          status === "awaiting_input" && "text-cinnabar",
-          status === "complete" && "text-paper",
+          status === "running" && "text-cyan",
+          status === "awaiting_input" && "text-cyan",
+          status === "complete" && "text-fg",
           status === "error" && "text-alarm",
-          status === "idle" && "text-paper-mute"
+          status === "idle" && "text-fg-muted"
         )}
       >
         {STATUS_LABELS[status]}
@@ -125,7 +125,7 @@ function Status({ status }: { status: RunStatus }) {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <span className="flex items-baseline gap-1.5">
-      <span className="text-paper-mute/85">{label}</span>
+      <span className="text-fg-muted/85">{label}</span>
       {children}
     </span>
   );

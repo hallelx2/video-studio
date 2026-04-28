@@ -1,54 +1,64 @@
 import { useState } from "react";
+import { Brain, ChevronRight } from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import type { TextActivity } from "../../lib/agent-state.js";
 import { MarkdownText } from "./MarkdownText.js";
+import { StreamRow, RowLabel } from "./StreamRow.js";
 
 /**
- * Folded inter-tool agent text — Hypatia pattern. When the agent says a short
- * sentence between two tool calls ("Now I'll read IMPROVEMENTS.md", "That's
- * what I needed; let me draft the script"), it's reasoning glue, not the
- * agent's substantive output. Collapsing it keeps the stream skimmable while
- * preserving the trace for anyone who wants to expand and read it.
+ * Folded inter-tool agent text — the "thought line" of the trace.
  *
- * The full TextCard remains in use for:
- *   - the agent's first text block before any tool calls (preface)
- *   - the agent's last text block after all tool calls (conclusion)
- *   - any text block longer than ~500 chars (substantial output)
+ *   ◯ THOUGHT  Skimming the README for tone, then drafting…   ▸
+ *
+ * Short reasoning glue between tool calls collapses to a single dim line so
+ * the stream stays skimmable. Click the row to expand into the full markdown
+ * thought, italicized in muted text so it remains visually subordinate to
+ * the agent's substantive output (which uses TextCard).
  */
 export function ReasoningCard({ activity }: { activity: TextActivity }) {
   const [open, setOpen] = useState(false);
-  const preview = takePreview(activity.text, 90);
+  const preview = takePreview(activity.text, 140);
 
   return (
-    <article className="min-w-0 border-l-2 border-l-brass/40 pl-5">
-      <button
+    <article className="min-w-0">
+      <StreamRow
+        tone="reasoning"
+        icon={<Brain className="h-3.5 w-3.5" strokeWidth={1.75} />}
+        expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="group flex w-full min-w-0 items-baseline gap-3 py-1 text-left transition-colors hover:bg-ink-raised/30"
-      >
-        <span className="shrink-0 font-mono text-[10px] uppercase tracking-widest text-brass/80">
-          thought
-        </span>
-        <span className="min-w-0 flex-1 truncate text-[13px] text-paper-mute">
-          {open ? activity.text.slice(0, 60) + "…" : preview}
-        </span>
-        <span
-          className={cn(
-            "shrink-0 font-mono text-[10px] tabular text-paper-mute/85 transition-transform",
-            open && "rotate-90"
-          )}
-          aria-hidden
-        >
-          ▸
-        </span>
-      </button>
-      {open && (
-        <div className="enter-rise pb-2 pl-0 pr-4 pt-1">
-          <MarkdownText
-            text={activity.text}
-            className="max-w-3xl text-[13.5px] leading-relaxed text-paper-mute"
+        ariaLabel={open ? "Collapse thought" : "Expand thought"}
+        header={
+          <span className="flex min-w-0 items-baseline gap-2.5">
+            <RowLabel tone="muted">thought</RowLabel>
+            {!open && (
+              <span className="min-w-0 flex-1 truncate text-[12.5px] italic text-fg-muted">
+                {preview}
+              </span>
+            )}
+          </span>
+        }
+        status={
+          <ChevronRight
+            className={cn(
+              "h-3.5 w-3.5 text-fg-muted/70 transition-transform duration-200",
+              open && "rotate-90 text-fg"
+            )}
+            strokeWidth={2}
+            aria-hidden
           />
-        </div>
-      )}
+        }
+      >
+        {open ? (
+          <div className="enter-rise mt-1">
+            <MarkdownText
+              text={activity.text}
+              className="max-w-3xl text-[13px] italic leading-relaxed text-fg-muted"
+            />
+          </div>
+        ) : (
+          <span className="sr-only">Reasoning collapsed</span>
+        )}
+      </StreamRow>
     </article>
   );
 }

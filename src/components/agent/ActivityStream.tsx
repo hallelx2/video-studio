@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  MessageSquare,
+  Wrench,
+  Activity as ActivityIcon,
+  AlertTriangle,
+  Layers,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "../../lib/cn.js";
 import type {
   Activity,
@@ -20,12 +28,18 @@ const REASONING_MAX_LEN = 500;
 
 type FilterKey = "all" | "chat" | "tools" | "progress" | "errors";
 
-const FILTERS: ReadonlyArray<{ key: FilterKey; label: string }> = [
-  { key: "all", label: "All" },
-  { key: "chat", label: "Chat" },
-  { key: "tools", label: "Tools" },
-  { key: "progress", label: "Progress" },
-  { key: "errors", label: "Errors" },
+interface FilterDef {
+  key: FilterKey;
+  label: string;
+  icon: LucideIcon;
+}
+
+const FILTERS: ReadonlyArray<FilterDef> = [
+  { key: "all", label: "All", icon: Layers },
+  { key: "chat", label: "Chat", icon: MessageSquare },
+  { key: "tools", label: "Tools", icon: Wrench },
+  { key: "progress", label: "Progress", icon: ActivityIcon },
+  { key: "errors", label: "Errors", icon: AlertTriangle },
 ];
 
 export function ActivityStream({
@@ -44,6 +58,7 @@ export function ActivityStream({
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const isRunning = agentState?.status === "running";
   const counts = useMemo(() => countByKind(activities), [activities]);
 
   const visible = useMemo(() => {
@@ -78,62 +93,88 @@ export function ActivityStream({
   };
 
   return (
-    <div className="flex h-full min-w-0 flex-col overflow-hidden">
-      {/* Filter chips */}
-      <div className="hairline flex items-center justify-between gap-4 border-b px-12 py-3">
-        <div className="flex items-center gap-1">
+    <div className="relative flex h-full min-w-0 flex-col overflow-hidden">
+      {/* Bioluminescent running indicator — a thin cyan line that pulses
+          across the very top of the stream container while the agent is
+          actively running. Restrained, but it carries the "alive" signal. */}
+      {isRunning && (
+        <span
+          aria-hidden
+          className="pulse-cyan pointer-events-none absolute inset-x-0 top-0 z-10 h-px bg-gradient-to-r from-transparent via-cyan to-transparent"
+        />
+      )}
+
+      {/* ─── Filter chips + tail toggle ──────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 border-b border-mist-08 px-12 py-3">
+        <div className="inline-flex items-center gap-1 rounded-full border border-mist-08 bg-surface/40 p-0.5">
           {FILTERS.map((f) => {
             const isActive = filter === f.key;
             const count = countForFilter(counts, f.key);
+            const Icon = f.icon;
             return (
               <button
                 key={f.key}
                 onClick={() => setFilter(f.key)}
+                aria-pressed={isActive}
                 className={cn(
-                  "relative flex items-baseline gap-2 px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
-                  isActive ? "text-paper" : "text-paper-mute hover:text-paper"
+                  "inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-medium tracking-tight transition-colors",
+                  isActive
+                    ? "bg-cyan/[0.10] text-cyan ring-1 ring-cyan/30"
+                    : "text-fg-muted hover:bg-mist-04 hover:text-fg"
                 )}
               >
+                <Icon
+                  className={cn("h-3.5 w-3.5", isActive ? "text-cyan" : "text-fg-muted/85")}
+                  strokeWidth={1.75}
+                  aria-hidden
+                />
                 <span>{f.label}</span>
                 {count > 0 && (
                   <span
                     className={cn(
-                      "tabular",
-                      isActive ? "text-cinnabar" : "text-paper-mute/85"
+                      "rounded-full px-1.5 font-mono text-[10px] tabular leading-tight",
+                      isActive ? "bg-cyan/15 text-cyan" : "bg-mist-08 text-fg-muted"
                     )}
                   >
                     {count}
                   </span>
                 )}
-                {isActive && (
-                  <span className="absolute bottom-0 left-3 right-3 h-px bg-cinnabar" />
-                )}
               </button>
             );
           })}
         </div>
+
         <button
           onClick={() => setAutoScroll((v) => !v)}
           className={cn(
-            "font-mono text-[10px] uppercase tracking-widest transition-colors",
-            autoScroll ? "text-cinnabar" : "text-paper-mute hover:text-paper"
+            "inline-flex items-center gap-2 rounded-full border px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-colors",
+            autoScroll
+              ? "border-cyan/30 bg-cyan/[0.06] text-cyan"
+              : "border-mist-08 text-fg-muted hover:border-mist-12 hover:bg-mist-04 hover:text-fg"
           )}
           title={autoScroll ? "Auto-scroll enabled — click to pause" : "Auto-scroll paused — click to resume"}
         >
-          {autoScroll ? "tail ●" : "tail ○"}
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              autoScroll ? "pulse-cyan bg-cyan" : "bg-fg-muted/40"
+            )}
+            aria-hidden
+          />
+          tail
         </button>
       </div>
 
-      {/* Stream */}
+      {/* ─── Stream body ────────────────────────────────────────────────── */}
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="min-w-0 flex-1 overflow-y-auto px-12 py-6"
+        className="min-w-0 flex-1 overflow-y-auto px-9 py-6"
       >
         {visible.length === 0 && !pendingPrompt ? (
           <Empty filter={filter} />
         ) : (
-          <ul className="flex min-w-0 flex-col gap-2">
+          <ul className="flex min-w-0 flex-col gap-1.5">
             {groupActivities(visible).map((item, i) => {
               if (item.kind === "log-group") {
                 return (
@@ -145,12 +186,14 @@ export function ActivityStream({
               const activity = item.activity;
               // Turn boundary: every UserActivity (except the very first one
               // in the visible list) starts a new turn — render a hairline
-              // divider above it so multi-run conversations are scannable.
+              // divider with a numbered "turn N" label so multi-run sessions
+              // are scannable at a glance.
+              const turnNumber = countTurnsBefore(visible, activity);
               const isTurnStart = activity.kind === "user" && i > 0;
               const asReasoning = isReasoningContext(visible, visible.indexOf(activity));
               return (
                 <li key={activity.id}>
-                  {isTurnStart && <TurnDivider />}
+                  {isTurnStart && <TurnDivider turnNumber={turnNumber} />}
                   {asReasoning ? (
                     <ReasoningCard activity={activity as TextActivity} />
                   ) : (
@@ -194,16 +237,35 @@ function isReasoningContext(activities: Activity[], i: number): boolean {
   return prev?.kind === "tool" && next?.kind === "tool";
 }
 
-function TurnDivider() {
+/**
+ * Numbered turn divider. A full-width hairline with a centered pill showing
+ * "turn 02" in mono uppercase — gives multi-run sessions a clear chapter
+ * structure without dominating the page.
+ */
+function TurnDivider({ turnNumber }: { turnNumber: number }) {
   return (
-    <div className="my-6 flex items-center gap-4" aria-hidden>
-      <span className="hairline h-px flex-1 border-t" />
-      <span className="font-mono text-[9px] uppercase tracking-widest text-paper-mute/50">
-        new turn
+    <div className="my-6 flex items-center gap-3" aria-hidden>
+      <span className="h-px flex-1 bg-mist-06" />
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-mist-08 bg-surface/40 px-2.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-fg-muted/70">
+        turn {turnNumber.toString().padStart(2, "0")}
       </span>
-      <span className="hairline h-px flex-1 border-t" />
+      <span className="h-px flex-1 bg-mist-06" />
     </div>
   );
+}
+
+/**
+ * How many user turns precede `activity` (inclusive). Used to label the
+ * turn divider with a sequential number so the reader can refer to "the
+ * second turn" rather than counting from the top.
+ */
+function countTurnsBefore(activities: Activity[], activity: Activity): number {
+  let n = 0;
+  for (const a of activities) {
+    if (a.kind === "user") n += 1;
+    if (a.id === activity.id) return n;
+  }
+  return n;
 }
 
 function renderActivity(activity: Activity): React.ReactNode {
@@ -219,7 +281,7 @@ function renderActivity(activity: Activity): React.ReactNode {
     case "log":
       // Singleton logs (no consecutive siblings to group) still render as a
       // tiny TerminalLogGroup so the formatting is consistent — one mono
-      // line in a dark sliver instead of bare text in the prose stream.
+      // block with one line instead of bare text in the prose stream.
       return <TerminalLogGroup level={activity.level} lines={[activity.text]} />;
     case "error":
       return <ErrorCard activity={activity} />;
@@ -267,9 +329,16 @@ function Empty({ filter }: { filter: FilterKey }) {
     progress: "No stage progress yet.",
     errors: "No errors. Good.",
   };
+  const Icon = FILTERS.find((f) => f.key === filter)?.icon ?? Layers;
   return (
-    <div className="flex h-full items-center justify-center">
-      <p className="font-mono text-[10px] uppercase tracking-widest text-paper-mute/85">
+    <div className="flex h-full flex-col items-center justify-center gap-3">
+      <span
+        aria-hidden
+        className="flex h-10 w-10 items-center justify-center rounded-full border border-mist-08 bg-surface/40 text-fg-muted/60"
+      >
+        <Icon className="h-4 w-4" strokeWidth={1.5} />
+      </span>
+      <p className="font-mono text-[11px] uppercase tracking-widest text-fg-muted/85">
         {messages[filter]}
       </p>
     </div>

@@ -8,8 +8,8 @@ import { findModel, MODEL_OPTIONS, type ModelOption } from "../../lib/types.js";
  * model; clicking opens a popover with a search input and the full model
  * list. Type to filter, click (or press the keyboard shortcut) to select.
  *
- * Visual: shadcn-style — tight tracking, subtle borders, paper-mute hover,
- * cinnabar dot for the active selection. Lives inside the Composer.
+ * Visual: shadcn-style — tight tracking, subtle borders, fg-muted hover,
+ * cyan dot for the active selection. Lives inside the Composer.
  */
 export function ModelPicker({
   modelId,
@@ -57,14 +57,14 @@ export function ModelPicker({
           type="button"
           onClick={toggle}
           className={cn(
-            "flex items-center gap-2 rounded-full border border-paper-mute/20 bg-ink px-3 py-1.5",
-            "font-mono text-[11px] tracking-wide text-paper transition-colors",
-            "hover:border-paper-mute/40 hover:bg-ink-edge"
+            "flex items-center gap-2 rounded-full border border-fg-muted/20 bg-void px-3 py-1.5",
+            "font-mono text-[11px] tracking-wide text-fg transition-colors",
+            "hover:border-fg-muted/40 hover:bg-elevated"
           )}
         >
           <FamilyMark family={active.family} />
           <span>{active.label}</span>
-          <ChevronDown className={cn("h-3 w-3 text-paper-mute transition-transform", open && "rotate-180")} />
+          <ChevronDown className={cn("h-3 w-3 text-fg-muted transition-transform", open && "rotate-180")} />
         </button>
       )}
     >
@@ -95,20 +95,20 @@ function ModelMenu({ activeId, onPick }: { activeId: string; onPick: (id: string
 
   return (
     <div>
-      <header className="flex items-center gap-2 border-b border-paper-mute/10 px-4 py-3">
+      <header className="flex items-center gap-2 border-b border-fg-muted/10 px-4 py-3">
         <FamilyMark family="opus" />
-        <span className="font-display text-sm font-semibold text-paper">Claude</span>
+        <span className="font-display text-sm font-semibold text-fg">Claude</span>
       </header>
 
       <div className="px-3 pt-3">
-        <div className="flex items-center gap-2 rounded-lg border border-paper-mute/15 bg-ink px-3 py-2 focus-within:border-paper-mute/30">
-          <SearchIcon className="h-3.5 w-3.5 text-paper-mute" />
+        <div className="flex items-center gap-2 rounded-lg border border-fg-muted/15 bg-void px-3 py-2 focus-within:border-fg-muted/30">
+          <SearchIcon className="h-3.5 w-3.5 text-fg-muted" />
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search models…"
-            className="w-full bg-transparent font-sans text-sm text-paper placeholder:text-paper-mute/80 focus:outline-none"
+            className="w-full bg-transparent font-sans text-sm text-fg placeholder:text-fg-muted/80 focus:outline-none"
             type="search"
             autoComplete="off"
             spellCheck={false}
@@ -126,25 +126,25 @@ function ModelMenu({ activeId, onPick }: { activeId: string; onPick: (id: string
                 onClick={() => onPick(model.id)}
                 className={cn(
                   "group flex w-full items-center gap-3 rounded-md px-3 py-2 text-left transition-colors",
-                  isActive ? "bg-ink-edge" : "hover:bg-ink-edge/60"
+                  isActive ? "bg-elevated" : "hover:bg-elevated/60"
                 )}
               >
                 <span className="shrink-0">
                   {isActive ? (
-                    <DotMark className="h-3 w-3 text-cinnabar" />
+                    <DotMark className="h-3 w-3 text-cyan" />
                   ) : (
-                    <StarMark className="h-3 w-3 text-paper-mute/50" />
+                    <StarMark className="h-3 w-3 text-fg-muted/50" />
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-sans text-sm text-paper">
+                  <span className="block truncate font-sans text-sm text-fg">
                     {model.label}
                   </span>
-                  <span className="block truncate font-mono text-[10px] text-paper-mute">
+                  <span className="block truncate font-mono text-[10px] text-fg-muted">
                     {model.description}
                   </span>
                 </span>
-                <span className="shrink-0 rounded-md border border-paper-mute/15 px-1.5 py-0.5 font-mono text-[10px] text-paper-mute">
+                <span className="shrink-0 rounded-md border border-fg-muted/15 px-1.5 py-0.5 font-mono text-[10px] text-fg-muted">
                   Ctrl+{model.shortcut}
                 </span>
               </button>
@@ -152,7 +152,7 @@ function ModelMenu({ activeId, onPick }: { activeId: string; onPick: (id: string
           );
         })}
         {visible.length === 0 && (
-          <li className="px-3 py-6 text-center font-mono text-[10px] uppercase tracking-widest text-paper-mute">
+          <li className="px-3 py-6 text-center font-mono text-[10px] uppercase tracking-widest text-fg-muted">
             no model matches "{query}"
           </li>
         )}
@@ -165,9 +165,9 @@ function ModelMenu({ activeId, onPick }: { activeId: string; onPick: (id: string
 
 function FamilyMark({ family }: { family: ModelOption["family"] }) {
   // Simple sparkle/asterisk glyph for the model brand mark. Cinnabar
-  // emphasis on Opus, brass on Sonnet, paper-mute on Haiku.
+  // emphasis on Opus, fg-muted on Sonnet, fg-faint on Haiku.
   const tone =
-    family === "opus" ? "text-cinnabar" : family === "sonnet" ? "text-brass" : "text-paper-mute";
+    family === "opus" ? "text-cyan" : family === "sonnet" ? "text-fg-faint" : "text-fg-muted";
   return (
     <svg viewBox="0 0 12 12" className={cn("h-3 w-3 shrink-0", tone)} aria-hidden>
       <path
