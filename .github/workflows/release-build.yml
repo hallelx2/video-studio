@@ -25,7 +25,7 @@ jobs:
       matrix:
         include:
           - os: windows-latest
-            bundle: bundle:win
+            target_flag: --win
             artifact_glob: |
               dist/installers/*.exe
               dist/installers/*.msi
@@ -33,14 +33,14 @@ jobs:
               dist/installers/*.blockmap
               dist/installers/latest*.yml
           - os: macos-latest
-            bundle: bundle:mac
+            target_flag: --mac
             artifact_glob: |
               dist/installers/*.dmg
               dist/installers/*.zip
               dist/installers/*.blockmap
               dist/installers/latest-mac.yml
           - os: ubuntu-latest
-            bundle: bundle:linux
+            target_flag: --linux
             artifact_glob: |
               dist/installers/*.AppImage
               dist/installers/*.deb
@@ -74,13 +74,22 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: bundle
-        # --publish=never tells electron-builder to skip its own GitHub
-        # upload — the release was already published by release-please,
-        # and electron-builder's draft-mode publisher refuses to attach
-        # to a non-draft release ("existingType=release publishingType=
-        # draft"). The next step uploads via softprops instead.
-        run: pnpm ${{ matrix.bundle }} -- --publish=never
+      - name: build
+        # Run the renderer + electron tsc + agent build first so
+        # electron-builder finds compiled output to package.
+        run: pnpm build
+
+      - name: package (electron-builder)
+        # Direct invocation, not via the npm script, so --publish=never
+        # actually reaches electron-builder. Without this it sees CI=true
+        # ("artifacts will be published if draft release exists") and
+        # tries to upload itself, which fails against the existing
+        # non-draft release that release-please made.
+        # CSC_IDENTITY_AUTO_DISCOVERY=false disables ad-hoc macOS
+        # signing attempts since we don't ship signing certs in CI.
+        run: pnpm exec electron-builder ${{ matrix.target_flag }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
       - name: attach artifacts to release
         uses: softprops/action-gh-release@v2

@@ -2,7 +2,7 @@
 
 # Video Studio
 
-https://github.com/hallelx2/video-studio/raw/main/assets/video-studio-demo.mp4
+<video src="https://github.com/hallelx2/video-studio/releases/download/v0.1.1/video-studio-demo.mp4" controls muted playsinline width="800"></video>
 
 **A desktop agent-driven video studio.** Compose, narrate, and render videos through a single in-app conversation with a Claude agent that drafts scripts, lays out HyperFrames compositions, and renders Chromium-safe MP4s — all without leaving the window.
 
@@ -27,7 +27,7 @@ https://github.com/hallelx2/video-studio/raw/main/assets/video-studio-demo.mp4
 Video Studio is the cockpit for an agent that ships finished videos. You describe what you want; the agent turns that into:
 
 - **A script** drafted with the persona, tone, and beat structure you set.
-- **A narration track** generated through ElevenLabs (or your local TTS).
+- **A narration track** generated through [Kokoro TTS](https://github.com/hexgrad/kokoro) — runs entirely on your machine, no per-character billing.
 - **HTML compositions** authored as HyperFrames documents — multi-aspect (1080×1080, 1920×1080, 9:16, …) with shared media and per-aspect tuning.
 - **A rendered MP4** post-processed into Chromium-safe H.264 / `yuv420p` so the in-app preview can stream the result without a transcode dance.
 
@@ -51,7 +51,7 @@ Every step is interruptible. The agent's reasoning streams into an activity feed
 | Agent        | [Claude Agent SDK](https://docs.anthropic.com/claude/docs/agent-sdk) (Opus 4.7 · 1M context)  |
 | Composition  | [HyperFrames](https://github.com/heygen-com/hyperframes) HTML compositions, GSAP timelines    |
 | Rendering    | HyperFrames render → FFmpeg post-process (H.264 / `yuv420p`)                                  |
-| Audio        | ElevenLabs (TTS, sound effects, music)                                                        |
+| Audio        | [Kokoro TTS](https://github.com/hexgrad/kokoro) — local, on-device narration (no API key, no metering) |
 | Packaging    | [electron-builder](https://www.electron.build) — Windows, macOS, Linux                        |
 
 ## Getting started
@@ -62,7 +62,7 @@ Every step is interruptible. The agent's reasoning streams into an activity feed
 - **pnpm ≥ 9** — `npm i -g pnpm`
 - **FFmpeg** on `PATH` — required by HyperFrames render and the post-process step
 - An **Anthropic API key** for the Claude Agent SDK
-- *(Optional)* an **ElevenLabs API key** if you want generated narration / SFX / music
+- **Kokoro TTS** runs locally — no extra API key needed for narration. The first run downloads the voice model (~330 MB) once and caches it.
 
 ### Install & run
 
