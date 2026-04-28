@@ -330,7 +330,11 @@ function VideoView({
     <div className="flex h-full w-full items-center justify-center bg-void">
       <video
         key={`${url}#${reloadKey}`}
-        src={url}
+        // Cache-bust on retry. After a fix-codec the file on disk has
+        // changed but the URL hasn't; Chromium will happily replay the
+        // cached "unsupported" response unless we force a fresh request
+        // by appending a query string.
+        src={reloadKey > 0 ? `${url}?bust=${reloadKey}` : url}
         controls
         autoPlay
         preload="auto"

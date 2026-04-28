@@ -323,17 +323,29 @@ function registerIpcHandlers(): void {
   // failed transcode doesn't destroy the original.
   ipcMain.handle("media:transcode-web-safe", async (_, inputPath: string) => {
     const tmpPath = `${inputPath}.tmp.mp4`;
+    // Baseline profile + level 3.1 is the widest-compatibility H.264
+    // configuration — every Chromium build, every iOS device, every
+    // LinkedIn upload pipeline accepts it. We pay a tiny size penalty
+    // versus high@4.0 but lose all the "won't play" edge cases.
+    // -ac 2 forces stereo audio (some compositions emit mono which
+    // Chromium occasionally rejects in MP4 containers).
+    // -map 0:v:0 -map 0:a:0? maps first video + optional first audio so
+    // we don't accidentally carry weird side data tracks across.
     const args = [
       "-y",
       "-i", inputPath,
+      "-map", "0:v:0",
+      "-map", "0:a:0?",
       "-c:v", "libx264",
-      "-profile:v", "high",
-      "-level", "4.0",
+      "-profile:v", "baseline",
+      "-level", "3.1",
       "-pix_fmt", "yuv420p",
       "-preset", "fast",
       "-crf", "20",
       "-movflags", "+faststart",
       "-c:a", "aac",
+      "-ar", "44100",
+      "-ac", "2",
       "-b:a", "192k",
       tmpPath,
     ];
