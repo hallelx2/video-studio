@@ -583,6 +583,55 @@ export function deriveAgentState(events: AgentEvent[]): AgentRunState {
   // model is a pure function of the message stream.
   state.artifacts = extractArtifacts(events);
 
+  // Finalization: any tool call that's STILL marked "running" once the run
+  // is done (or paused for input) MUST have actually completed — the SDK
+  // serializes tool execution within a turn, so the agent can't have moved
+  // past it without a tool_result. We sometimes drop the result event (id
+  // mismatch, mid-stream interruption, etc), which leaves the row stuck
+  // showing "Running…" forever. Sweep them to "complete" so the timeline
+  // reads correctly.
+  if (
+    state.status === "complete" ||
+    state.status === "error" ||
+    state.status === "awaiting_input"
+  ) {
+    for (const a of state.activities) {
+      if (a.kind === "tool" && a.status === "running") {
+        a.status = "complete";
+        if (a.endedAt === null) {
+          a.endedAt = state.metrics.endedAt ?? a.ts;
+        }
+      }
+    }
+  }
+
+  // Mid-run sweep: a running tool call is also stale if a LATER tool call
+  // (or the agent's next text/result) exists in the timeline — the agent
+  // can only emit those after the prior tool returned. Mark the predecessor
+  // complete so "Running… 171s" doesn't linger on a tool the agent has
+  // already moved past.
+  let lastSettledIdx = -1;
+  for (let i = state.activities.length - 1; i >= 0; i--) {
+    const a = state.activities[i];
+    if (a.kind === "tool" && a.status !== "running") {
+      lastSettledIdx = i;
+      break;
+    }
+    if (a.kind === "text" || a.kind === "user") {
+      lastSettledIdx = i;
+      break;
+    }
+  }
+  if (lastSettledIdx >= 0) {
+    for (let i = 0; i < lastSettledIdx; i++) {
+      const a = state.activities[i];
+      if (a.kind === "tool" && a.status === "running") {
+        a.status = "complete";
+        if (a.endedAt === null) a.endedAt = a.ts;
+      }
+    }
+  }
+
   return state;
 }
 
