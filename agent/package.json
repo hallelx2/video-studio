@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "embed-prompt": "node scripts/embed-prompt.mjs",
-    "build": "pnpm embed-prompt && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm embed-prompt && pnpm typecheck && node esbuild.config.mjs",
     "dev": "pnpm embed-prompt && tsc -p tsconfig.json -w",
     "start": "node dist/index.js"
   },

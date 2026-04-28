@@ -59,7 +59,6 @@
       "dist/renderer/**/*",
       "agent/dist/**/*",
       "agent/prompts/**/*",
-      "agent/node_modules/**/*",
       "build/icon.png",
       "build/icons/**/*",
       "DESIGN.md",
