@@ -64,8 +64,12 @@ Every step is interruptible. The agent's reasoning streams into an activity feed
 - **Node.js ≥ 22**
 - **pnpm ≥ 9** — `npm i -g pnpm`
 - **FFmpeg** on `PATH` — required by HyperFrames render and the post-process step
+- **Python ≥ 3.10** with `kokoro-onnx` + `soundfile` — drives narration synthesis. Install once:
+  ```bash
+  pip install kokoro-onnx soundfile
+  ```
+  Then point Settings → Python interpreter at the matching `python.exe` / `python3` if it isn't your default. The first narration run downloads the voice model (~330 MB) and caches it.
 - An **Anthropic API key** for the Claude Agent SDK
-- **Kokoro TTS** runs locally — no extra API key needed for narration. The first run downloads the voice model (~330 MB) once and caches it.
 
 ### Install & run
 

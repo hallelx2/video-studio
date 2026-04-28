@@ -278,12 +278,23 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   if (resume.invalidationNote) {
     // The workspace has stale artifacts from a previous run with a
     // different video-type. Surface explicitly so the user knows why
-    // we're regenerating instead of resuming.
+    // we're regenerating instead of resuming, AND wipe the stale
+    // outputs from disk so the script-unchanged gate-skip can't false-
+    // positive against last run's hash. Without this the resume detector
+    // correctly says "regenerating" but the agent's stage-3 prompt
+    // sometimes leaves the existing script.json untouched, so its hash
+    // matches the cached approval and the gate is bypassed.
     emit({
       type: "progress",
       phase: "reading_source",
       message: resume.invalidationNote,
       progress: 0.05,
+    });
+    await invalidateStaleArtifacts({
+      scriptPath,
+      approvalPath: join(projectWorkspacePath, ".approval.json"),
+      narrationDir: join(projectWorkspacePath, "narration"),
+      bridgeRoot: join(projectWorkspacePath, "browser-bridge"),
     });
   } else if (resume.resumedFrom) {
     emit({
@@ -332,7 +343,14 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   const scriptAlreadyApproved =
     !!previousApproval &&
     !!currentScriptHash &&
-    previousApproval.scriptHash === currentScriptHash;
+    previousApproval.scriptHash === currentScriptHash &&
+    // Approval is bound to the videoType it was issued for. A run with a
+    // different videoType always re-prompts, even if .approval.json
+    // happens to survive (e.g. user manually copied a workspace). Older
+    // .approval.json files without the field are accepted to preserve
+    // backward compat.
+    (previousApproval.videoType == null ||
+      previousApproval.videoType === opts.videoType);
 
   emit({
     type: "progress",
@@ -410,6 +428,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       const fresh = await hashFileIfExists(scriptPath);
       await writeApprovalState(approvalPath, {
         ...(previousApproval ?? {}),
+        videoType: opts.videoType,
         scriptHash: fresh,
         scriptApprovedAt: Date.now(),
       });
@@ -1064,6 +1083,12 @@ async function listFiles(dir: string): Promise<string[]> {
 // revising compositions clears composeHash.
 
 interface ApprovalState {
+  /** videoType the approval was issued for. A different videoType produces
+   *  a structurally different script (different scene IDs, beats, format)
+   *  so the approval cannot transfer — the gate must re-prompt. Optional
+   *  for backward compat with .approval.json files written before this
+   *  field existed. */
+  videoType?: string | null;
   scriptHash?: string | null;
   scriptApprovedAt?: number | null;
   composeHash?: string | null;
@@ -1095,6 +1120,61 @@ async function clearApprovalState(path: string): Promise<void> {
   } catch {
     // ENOENT or anything else — fine, nothing to clear.
   }
+}
+
+/**
+ * Nuke artifacts derived from a previous run whose videoType no longer
+ * matches the current request. Without this, the script-unchanged gate-
+ * skip can false-positive against a stale script.json + .approval.json
+ * pair from the prior videoType, leading to "Script unchanged from
+ * previous approval" when the user clearly asked for a different shape
+ * of video.
+ *
+ * Tolerant of missing files / dirs — best-effort cleanup, not gating.
+ */
+async function invalidateStaleArtifacts(args: {
+  scriptPath: string;
+  approvalPath: string;
+  narrationDir: string;
+  bridgeRoot: string;
+}): Promise<void> {
+  await Promise.all([
+    fs.unlink(args.scriptPath).catch(() => undefined),
+    fs.unlink(args.approvalPath).catch(() => undefined),
+    fs.rm(args.narrationDir, { recursive: true, force: true }).catch(() => undefined),
+    fs.rm(args.bridgeRoot, { recursive: true, force: true }).catch(() => undefined),
+  ]);
+}
+
+/**
+ * Detect application-level failures from hyperframes / kokoro / Python
+ * that aren't recoverable by retrying with a different spawn strategy.
+ * If we see one of these, the spawn loop bails immediately so the user
+ * gets the actionable error (e.g. "Run: pip install kokoro-onnx") at
+ * the top of the stack instead of three rounds of "trying next strategy"
+ * burying the real cause.
+ */
+function isFatalAppError(stderr: string): { fatal: boolean; hint?: string } {
+  const lower = stderr.toLowerCase();
+  if (
+    lower.includes("the kokoro-onnx package is not installed") ||
+    lower.includes("modulenotfounderror: no module named 'kokoro")
+  ) {
+    return {
+      fatal: true,
+      hint: "Kokoro TTS dependencies missing — install with: pip install kokoro-onnx soundfile",
+    };
+  }
+  if (lower.includes("modulenotfounderror: no module named 'soundfile")) {
+    return {
+      fatal: true,
+      hint: "soundfile Python package missing — install with: pip install soundfile",
+    };
+  }
+  if (lower.includes("ffmpeg") && lower.includes("not found")) {
+    return { fatal: true, hint: "FFmpeg not on PATH — install ffmpeg and restart the app." };
+  }
+  return { fatal: false };
 }
 
 async function hashFileIfExists(path: string): Promise<string | null> {
@@ -1421,6 +1501,21 @@ async function runTtsCommand(args: {
       return;
     } catch (err) {
       lastErr = err as Error;
+      // If the failure is an application-level error (e.g. Python
+      // package missing), retrying with a different spawn shell won't
+      // help — bail immediately with the actionable hint at the top of
+      // the message. Without this short-circuit users see three rounds
+      // of "trying next strategy" before the real "pip install ..." hint
+      // shows up at the bottom of the log.
+      const fatal = isFatalAppError((err as Error).message ?? "");
+      if (fatal.fatal) {
+        emit({
+          type: "agent_log",
+          level: "tts-err",
+          text: `[${args.sceneId}] fatal: ${fatal.hint ?? "non-recoverable error"}`,
+        });
+        throw new Error(`${fatal.hint}\n\nUnderlying error:\n${(err as Error).message}`);
+      }
       emit({
         type: "agent_log",
         level: "tts-warn",
