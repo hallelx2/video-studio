@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.8](https://github.com/hallelx2/video-studio/compare/v0.1.7...v0.1.8) (2026-04-29)
+
+
+### Features
+
+* **agent:** phase 6 — full-pipeline becomes default macro + drop ?legacy=1 ([0ada424](https://github.com/hallelx2/video-studio/commit/0ada42493d5415c501d4205f44122e8934799611))
+* **agent:** tool architecture phase 3 — narration + resume + run-tool IPC ([622e0a1](https://github.com/hallelx2/video-studio/commit/622e0a193084aef46f989d1ec4738c0553db72a0))
+* **agent:** tool architecture phase 4 — full extraction + macro orchestrator ([6caf516](https://github.com/hallelx2/video-studio/commit/6caf516842d255fff8137ff2db50d39c177c47a6))
+* **stage:** phase 1 ui quick wins — ribbon + accessible actions + canvas size ([3975523](https://github.com/hallelx2/video-studio/commit/3975523b1ad7496b98c521483f275975bbade667))
+* **stage:** phase 2 — inline narration audio + render player + approval banner ([7babe2a](https://github.com/hallelx2/video-studio/commit/7babe2a11fb79c11f61114af39903951787d893c))
+* **stage:** phase 5 — first-class tool buttons + per-scene narration regen ([9720496](https://github.com/hallelx2/video-studio/commit/9720496f1ef6a798cb990c1d1134dc9c1813eabe))
+
+
+### Bug Fixes
+
+* **agent:** switch dev watch from tsc to esbuild --watch ([65de390](https://github.com/hallelx2/video-studio/commit/65de3902834988560845208775323a308dec4316))
+* **bridge:** surface the real error line in agent-exit messages ([c02662b](https://github.com/hallelx2/video-studio/commit/c02662b794de2ec3b4c4be727583d9aa31cc365a))
+* **stage:** pull a useful headline out of long error messages ([558a8a5](https://github.com/hallelx2/video-studio/commit/558a8a5629e9a8a667602b7e6838ec7aec7c37b1))
+* **stage:** surface agent status (errored / awaiting / starting) on main pane ([2c1a138](https://github.com/hallelx2/video-studio/commit/2c1a13827b2be4603ef6448f3812612fec01ce96))
+* **workspace:** per-session workspace dirs + block studio-media downloads ([73bcfa2](https://github.com/hallelx2/video-studio/commit/73bcfa2459c60dd2dfffe39384be8ec4656543b2))
+
 ## [0.1.7](https://github.com/hallelx2/video-studio/compare/v0.1.6...v0.1.7) (2026-04-29)
 
 
