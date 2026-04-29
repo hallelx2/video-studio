@@ -322,3 +322,41 @@ select:focus-visible,
 .animate-verb-dots {
   animation: verb-dots 1400ms ease-in-out infinite;
 }
+
+/* ─── Canvas generation scan-line ─────────────────────────────────────────
+ * A 4px tall, 8% white horizontal band that sweeps top-to-bottom across
+ * the active canvas while the scene is in flight. Mimics the feeling of
+ * "frames being captured" without being literal. Subtle by design.
+ * Implemented as a pseudo-element via .canvas-scan utility so the iframe
+ * underneath stays interactive (pointer-events-none + absolute). */
+@keyframes canvas-scan {
+  0%   { transform: translateY(-12%); }
+  100% { transform: translateY(112%); }
+}
+.canvas-scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  animation: canvas-scan 2400ms cubic-bezier(0.55, 0.05, 0.45, 0.95) infinite;
+}
+
+/* ─── Active-scene halo (deeper than the static border) ──────────────────
+ * Soft cyan glow that pulses on the active scene's frame during
+ * generation. Not used on idle scenes (chrome restraint). */
+@keyframes halo-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(0, 255, 255, 0); }
+  50%      { box-shadow: 0 0 28px rgba(0, 255, 255, 0.12); }
+}
+.animate-halo {
+  animation: halo-pulse 2800ms ease-in-out infinite;
+}

@@ -57,8 +57,8 @@ export function Canvas({
     <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-void px-12 py-10">
       <div
         className={cn(
-          "relative aspect-video w-full max-w-5xl border bg-surface transition-all duration-500",
-          isInFlight ? "border-cyan/40" : "border-mist-08"
+          "relative aspect-video w-full max-w-5xl overflow-hidden border bg-surface transition-all duration-500",
+          isInFlight ? "border-cyan/40 animate-halo canvas-scan" : "border-mist-08"
         )}
       >
         {iframeUrl ? (
