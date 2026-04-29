@@ -212,9 +212,13 @@ select:focus-visible,
   line-height: 1.00; /* tight */
 }
 
-/* ─── Hairline (1px mist-10 border) ───────────────────────────────────── */
+/* ─── Hairline (1px mist-08 border) ───────────────────────────────────────
+ * Dropped from mist-10 to mist-08 so chrome recedes more — the new
+ * preview-first Stage layout wants the canvas to own the optical center,
+ * which means borders should *frame* without competing. Components that
+ * want a louder edge can opt up via `border-mist-10` directly. */
 .hairline {
-  border-color: var(--color-mist-10);
+  border-color: var(--color-mist-08);
 }
 
 /* ─── Brutalist offset shadow ─────────────────────────────────────────────
