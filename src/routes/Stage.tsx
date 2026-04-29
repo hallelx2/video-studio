@@ -10,6 +10,7 @@ import { Canvas } from "../components/stage/Canvas.js";
 import { SceneStrip } from "../components/stage/SceneStrip.js";
 import { RenderStrip } from "../components/stage/RenderStrip.js";
 import { DetailsModal } from "../components/stage/DetailsModal.js";
+import { StageStatus } from "../components/stage/StageStatus.js";
 
 /**
  * Preview-first studio layout. Replaces Workbench's chat-shaped main
@@ -117,6 +118,13 @@ export function StageRoute({
 
           {hasHistory ? (
             <>
+              <StageStatus
+                agent={agent}
+                globalActivity={globalActivity}
+                hasScenes={scenes.length > 0}
+                onRetry={() => slashHandlers.onRetryStage("redraft")}
+                onOpenDetails={() => setDetailsOpen(true)}
+              />
               <Canvas
                 activeScene={activeScene}
                 formatHint={formatHint}
