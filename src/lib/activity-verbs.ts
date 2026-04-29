@@ -36,11 +36,26 @@ const ROTATION_MS = 3500;
  * The `cycleKey` returned alongside the verb increments on each rotation
  * — useful as a React `key` prop on the displayed text node so a parent
  * can drive its own cross-fade animation when the verb changes.
+ *
+ * Optional `opts` widens the rotating verb with stage / format context so
+ * the UI can render "Composing 1080×1080 · stage 5/6" instead of a bare
+ * verb. The single-arg form stays valid for back-compat.
  */
-export function useActivityVerb(state: ActivityState | null | undefined): {
-  verb: string | null;
-  cycleKey: number;
-} {
+export interface VerbContext {
+  /** 1-indexed stage in the pipeline (1..stageTotal). */
+  stage?: number;
+  /** Total stages in the pipeline (typically 6). */
+  stageTotal?: number;
+  /** Format being processed, e.g. "1080×1080" or "linkedin". */
+  format?: string;
+  /** Optional scene label; renders inline as " · scene 3" if present. */
+  sceneLabel?: string;
+}
+
+export function useActivityVerb(
+  state: ActivityState | null | undefined,
+  opts?: VerbContext
+): { verb: string | null; cycleKey: number; label: string | null } {
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -53,10 +68,23 @@ export function useActivityVerb(state: ActivityState | null | undefined): {
     return () => clearInterval(id);
   }, [state]);
 
-  if (!state) return { verb: null, cycleKey: 0 };
+  if (!state) return { verb: null, cycleKey: 0, label: null };
   const pool = VERB_POOL[state];
-  if (!pool || pool.length === 0) return { verb: null, cycleKey: tick };
-  return { verb: pool[tick % pool.length], cycleKey: tick };
+  if (!pool || pool.length === 0) return { verb: null, cycleKey: tick, label: null };
+  const verb = pool[tick % pool.length];
+  const label = composeLabel(verb, opts);
+  return { verb, cycleKey: tick, label };
+}
+
+function composeLabel(verb: string, opts?: VerbContext): string {
+  const parts: string[] = [verb];
+  if (opts?.format) parts.push(opts.format);
+  if (opts?.sceneLabel) parts.push(opts.sceneLabel);
+  const stageSuffix =
+    opts?.stage && opts?.stageTotal
+      ? ` · stage ${opts.stage}/${opts.stageTotal}`
+      : "";
+  return parts.join(" · ") + stageSuffix;
 }
 
 // Per-instance jitter (~±300ms) so multiple verbs on the same screen

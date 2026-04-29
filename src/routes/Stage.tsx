@@ -11,6 +11,7 @@ import { SceneStrip } from "../components/stage/SceneStrip.js";
 import { RenderStrip } from "../components/stage/RenderStrip.js";
 import { DetailsModal } from "../components/stage/DetailsModal.js";
 import { StageStatus } from "../components/stage/StageStatus.js";
+import { StageRibbon } from "../components/stage/StageRibbon.js";
 
 /**
  * Preview-first studio layout. Replaces Workbench's chat-shaped main
@@ -60,6 +61,11 @@ export function StageRoute({
   const { scenes, globalActivity, latestCompositionPath } = useSceneState(events);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // ArtifactPanel defaults collapsed to a slim icon rail. The panel sits
+  // on the right edge competing with the Canvas for width — keeping it
+  // closed by default reclaims ~360px so the canvas can breathe. Click
+  // the rail's icon to expand the full panel inline.
+  const [artifactsExpanded, setArtifactsExpanded] = useState(false);
 
   // Default the active scene to the first one once scenes hydrate.
   const activeScene = useMemo(() => {
@@ -125,6 +131,11 @@ export function StageRoute({
                 onRetry={() => slashHandlers.onRetryStage("redraft")}
                 onOpenDetails={() => setDetailsOpen(true)}
               />
+              <StageRibbon
+                stages={agent.stages}
+                currentStageId={agent.currentStageId}
+                onOpenDetails={() => setDetailsOpen(true)}
+              />
               <Canvas
                 activeScene={activeScene}
                 formatHint={formatHint}
@@ -186,7 +197,34 @@ export function StageRoute({
           )}
         </div>
 
-        <ArtifactPanel artifacts={agent.artifacts} projectId={productId} />
+        {artifactsExpanded ? (
+          <div className="relative flex h-full">
+            <button
+              onClick={() => setArtifactsExpanded(false)}
+              aria-label="Collapse artifacts panel"
+              title="Collapse"
+              className="absolute -left-3 top-3 z-10 flex h-6 w-6 items-center justify-center border border-mist-08 bg-void font-mono text-[11px] text-fg-muted hover:border-mist-12 hover:text-fg"
+            >
+              ›
+            </button>
+            <ArtifactPanel artifacts={agent.artifacts} projectId={productId} />
+          </div>
+        ) : (
+          <button
+            onClick={() => setArtifactsExpanded(true)}
+            aria-label="Expand artifacts panel"
+            title={`${agent.artifacts.length} artifact${agent.artifacts.length === 1 ? "" : "s"}`}
+            className="hairline flex w-12 shrink-0 flex-col items-center gap-3 border-l py-4 font-mono text-[10px] uppercase tracking-widest text-fg-faint transition-colors hover:text-fg-muted"
+          >
+            <span className="text-fg-muted">‹</span>
+            <span
+              style={{ writingMode: "vertical-rl" }}
+              className="rotate-180 select-none"
+            >
+              artifacts {agent.artifacts.length > 0 ? `· ${agent.artifacts.length}` : ""}
+            </span>
+          </button>
+        )}
       </div>
 
       <DetailsModal

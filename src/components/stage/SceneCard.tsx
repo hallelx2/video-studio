@@ -60,15 +60,34 @@ export function SceneCard({
         </span>
       ) : null}
 
-      {/* Hover-revealed actions */}
-      <div className="invisible mt-1 flex gap-2 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
-        <ActionPill onClick={onRewrite} disabled={disabled} title="Rewrite this scene's script">
+      {/* Always-visible action row — replaces the previous hover-only
+          opacity:0 affordance so keyboard / touch users can reach
+          rewrite / re-record / restage without needing to hover the
+          card. Idle: 50% opacity (quiet); on card hover/focus-within:
+          100% (loud). Stays in the tab order regardless. */}
+      <div className="mt-1 flex gap-2 opacity-50 transition-opacity duration-200 group-hover:opacity-100 focus-within:opacity-100">
+        <ActionPill
+          onClick={onRewrite}
+          disabled={disabled}
+          aria-label={`Rewrite scene ${scene.index + 1} script`}
+          title="Rewrite this scene's script"
+        >
           ✏ rewrite
         </ActionPill>
-        <ActionPill onClick={onReRecord} disabled={disabled} title="Regenerate narration">
+        <ActionPill
+          onClick={onReRecord}
+          disabled={disabled}
+          aria-label={`Re-record scene ${scene.index + 1} narration`}
+          title="Regenerate narration"
+        >
           🔁 re-record
         </ActionPill>
-        <ActionPill onClick={onRestage} disabled={disabled} title="Re-author the composition">
+        <ActionPill
+          onClick={onRestage}
+          disabled={disabled}
+          aria-label={`Restage scene ${scene.index + 1} composition`}
+          title="Re-author the composition"
+        >
           🎨 restage
         </ActionPill>
       </div>
@@ -103,21 +122,31 @@ function ActionPill({
   children,
   disabled,
   title,
+  ...rest
 }: {
   onClick: () => void;
   children: React.ReactNode;
   disabled?: boolean;
   title?: string;
-}) {
+} & React.AriaAttributes) {
   return (
     <button
       onClick={(e) => {
         e.stopPropagation();
         onClick();
       }}
+      onKeyDown={(e) => {
+        // Stop Space/Enter from also triggering the parent card's onClick
+        // when the user is focusing this button — they meant the action,
+        // not "select the scene".
+        if (e.key === "Enter" || e.key === " ") {
+          e.stopPropagation();
+        }
+      }}
       disabled={disabled}
       title={title}
-      className="border border-mist-08 px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-fg-muted transition-colors hover:border-cyan/40 hover:text-cyan disabled:opacity-50"
+      className="border border-mist-08 px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest text-fg-muted transition-colors hover:border-cyan/40 hover:text-cyan focus-visible:border-cyan/60 focus-visible:text-cyan focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan/40 disabled:opacity-50"
+      {...rest}
     >
       {children}
     </button>

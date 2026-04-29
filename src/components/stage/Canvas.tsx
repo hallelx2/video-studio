@@ -57,13 +57,25 @@ export function Canvas({
     : false;
   const { verb, cycleKey } = useActivityVerb(isInFlight ? activeScene?.activityState ?? null : null);
 
+  // Aspect ratio derived from the active format hint. The canvas now scales
+  // to fill available space respecting the aspect — no symmetric padding
+  // shrinking compositions on smaller windows.
+  const { ratio, css } = formatToAspectRatio(formatHint);
+
   return (
-    <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-void px-12 py-10">
+    <div className="relative grid flex-1 place-items-center overflow-hidden bg-void p-4">
       <div
         className={cn(
-          "relative aspect-video w-full max-w-5xl overflow-hidden border bg-surface transition-all duration-500",
+          "relative max-h-full max-w-full overflow-hidden border bg-surface transition-all duration-500",
           isInFlight ? "border-cyan/40 animate-halo canvas-scan" : "border-mist-08"
         )}
+        style={{
+          aspectRatio: css,
+          // Width caps at the smaller of (a) the parent's full width or
+          // (b) whatever fits height-wise given the ribbon + scene strip
+          // + render strip + composer chrome above and below (~220px).
+          width: `min(100%, calc((100vh - 220px) * ${ratio}))`,
+        }}
       >
         {iframeUrl ? (
           <iframe
@@ -107,6 +119,27 @@ export function Canvas({
       </div>
     </div>
   );
+}
+
+/**
+ * Map a format id (e.g. "linkedin", "youtube-short") to both a numeric ratio
+ * (for width calc) and a CSS aspect-ratio string (for the canvas frame
+ * itself). Defaults to 16:9 when the format is unrecognized so the canvas
+ * never collapses to a 0×0 box.
+ */
+function formatToAspectRatio(formatHint: string): { ratio: number; css: string } {
+  switch (formatHint) {
+    case "linkedin":
+      return { ratio: 1, css: "1 / 1" };
+    case "youtube-short":
+      return { ratio: 9 / 16, css: "9 / 16" };
+    case "x":
+    case "youtube":
+    case "hero":
+    case "pitch":
+    default:
+      return { ratio: 16 / 9, css: "16 / 9" };
+  }
 }
 
 function EmptyCanvas({ workspacePath }: { workspacePath: string | null }) {
