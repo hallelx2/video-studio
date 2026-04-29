@@ -404,6 +404,10 @@ export class AgentBridge {
         "generate-video",
         JSON.stringify({
           projectId: req.projectId,
+          // Per-session workspace scoping. Without this every session in
+          // the same project edits the same script.json / compositions /
+          // renders, and resume detection bleeds artifacts across threads.
+          sessionId: req.sessionId,
           videoType: req.videoType,
           formats: req.formats,
           brief: req.brief ?? "",

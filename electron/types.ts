@@ -340,6 +340,13 @@ export const FORMAT_OPTIONS: Array<{ id: VideoFormat; label: string; aspect: str
 
 export interface GenerateRequest {
   projectId: string;
+  /** Per-session scope so each thread under a project gets its own
+   *  workspace subdirectory: <workspace>/<projectId>/<sessionId>/. Without
+   *  this, every session in the same project edits the same script.json /
+   *  composition / renders, and the agent's resume detection picks up
+   *  artifacts from a sibling session. Optional for backward compat:
+   *  legacy callers fall back to the project-only path. */
+  sessionId?: string;
   videoType: VideoType;
   formats: VideoFormat[];
   /** User-supplied brief / extra direction. Optional for non-custom video types. */

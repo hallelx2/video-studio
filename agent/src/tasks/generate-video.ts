@@ -118,6 +118,9 @@ function classifyApproval(
 
 export interface GenerateVideoOptions {
   projectId: string;
+  /** Session id — used to scope the workspace subdirectory so each
+   *  thread under the same project can't touch the others' artifacts. */
+  sessionId?: string;
   videoType: string;
   formats: string[];
   brief: string;
@@ -173,6 +176,21 @@ const PERSONA_VOICE_PROMPTS: Record<string, string> = {
     "- Total duration target: closer to the upper bound of the video type's duration range.",
   ].join("\n"),
 };
+
+/**
+ * Sanitize a string for safe use as a filesystem path segment. Strips
+ * everything that isn't alphanumeric / underscore / hyphen so a hostile
+ * or unusual sessionId can't break out of the workspace subdir. Returns
+ * null when the result would be empty.
+ */
+function sanitizeSegment(value: string | undefined | null): string | null {
+  if (!value) return null;
+  const cleaned = String(value)
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .slice(0, 64);
+  return cleaned.length > 0 ? cleaned : null;
+}
 
 function applyPersona(systemPrompt: string, personaId: string | undefined): string {
   if (!personaId) return systemPrompt;
@@ -246,7 +264,15 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
   );
 
   const projectSourcePath = join(orgRoot, opts.projectId);
-  const projectWorkspacePath = join(workspaceRoot, opts.projectId);
+  // Per-session workspace: <workspaceRoot>/<projectId>/<sessionId>/. Each
+  // session under the same project gets its own scratch directory so the
+  // agent's resume-detection can't pick up artifacts from a sibling
+  // session. Falls back to the project-only path when no sessionId is
+  // supplied (legacy callers; non-Studio entry points).
+  const sessionDirSegment = sanitizeSegment(opts.sessionId);
+  const projectWorkspacePath = sessionDirSegment
+    ? join(workspaceRoot, opts.projectId, sessionDirSegment)
+    : join(workspaceRoot, opts.projectId);
   const meta = VIDEO_TYPE_META[opts.videoType] ?? VIDEO_TYPE_META["product-launch"];
   const ttsVoice = process.env.TTS_VOICE ?? "af_nova";
 

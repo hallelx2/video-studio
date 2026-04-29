@@ -110,6 +110,27 @@ function createWindow(): void {
       void shell.openExternal(url).catch(() => undefined);
     }
   });
+  // Block any `will-download` triggered by studio-media:// or localhost
+  // preview URLs. Without this, an iframe inside Canvas / PreviewPanel
+  // that tries to navigate to a `studio-media://` URL gets caught by
+  // Chromium's downloader (the protocol response is treated as a file
+  // download) and Electron pops the native Save-As dialog. We always
+  // want those URLs to render inline, never to download.
+  mainWindow.webContents.session.on("will-download", (event, item) => {
+    const url = item.getURL();
+    if (
+      url.startsWith("studio-media:") ||
+      url.startsWith("http://localhost") ||
+      url.startsWith("http://127.0.0.1")
+    ) {
+      event.preventDefault();
+      try {
+        item.cancel();
+      } catch {
+        // already cancelled / detached — fine
+      }
+    }
+  });
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();

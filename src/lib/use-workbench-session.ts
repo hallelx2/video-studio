@@ -296,6 +296,9 @@ export function useWorkbenchSession({
       try {
         await generateVideo({
           projectId: productId,
+          // Per-session workspace scoping — sibling sessions in the same
+          // project no longer share script.json / compositions / renders.
+          sessionId: currentSessionId ?? undefined,
           videoType: overrides?.videoType ?? videoType,
           formats: overrides?.formats ?? formats,
           brief: brief.trim() || undefined,
@@ -310,7 +313,7 @@ export function useWorkbenchSession({
         setRunning(false);
       }
     },
-    [productId, videoType, formats, modelId, personaId]
+    [productId, currentSessionId, videoType, formats, modelId, personaId]
   );
 
   const handlePromptResponse = useCallback(
