@@ -1,6 +1,6 @@
 {
   "name": "video-studio",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "description": "Desktop agent-driven video studio (Electron + Claude Agent SDK + HyperFrames)",
