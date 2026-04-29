@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.6](https://github.com/hallelx2/video-studio/compare/v0.1.5...v0.1.6) (2026-04-29)
+
+
+### Features
+
+* **agent:** emit activity events from stage seams + SDK turn boundaries ([b929dd1](https://github.com/hallelx2/video-studio/commit/b929dd1d721ed8b8333eba06159ab55e0908fea7))
+* **events:** add activity event type + sceneId on progress ([a0b4285](https://github.com/hallelx2/video-studio/commit/a0b4285c48994a03b903762129ed41f2a189e36e))
+* **stage:** cinematic generation overlay on canvas ([60f11de](https://github.com/hallelx2/video-studio/commit/60f11de862a895dcaa37ee1c3bdb35220ef75a10))
+* **stage:** preview-first studio route with scene strip + details modal ([28c5e44](https://github.com/hallelx2/video-studio/commit/28c5e44262040fe35319a265fee2b44a1b21c2a8))
+
+
+### Refactors
+
+* **workbench:** hoist session/run logic into use-workbench-session hook ([3f6fb39](https://github.com/hallelx2/video-studio/commit/3f6fb39b026102d1d3f50398b26a84fabfa14985))
+
 ## [0.1.5](https://github.com/hallelx2/video-studio/compare/v0.1.4...v0.1.5) (2026-04-28)
 
 
