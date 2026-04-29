@@ -301,3 +301,24 @@ select:focus-visible,
   -webkit-text-fill-color: transparent;
   animation: text-shimmer-sweep 2.4s linear infinite;
 }
+
+/* ─── Activity verb cross-fade ─────────────────────────────────────────────
+ * Used by SceneCard / Canvas verb overlay so a rotated verb (Drafting →
+ * Polishing) fades in instead of snapping. Keyed off React's `key` prop on
+ * the text node — the element is replaced when the verb changes, which
+ * restarts the animation. */
+@keyframes verb-fade {
+  0%   { opacity: 0; transform: translateY(2px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-verb-fade {
+  animation: verb-fade 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes verb-dots {
+  0%, 20%   { opacity: 0.2; }
+  50%       { opacity: 0.7; }
+  80%, 100% { opacity: 0.2; }
+}
+.animate-verb-dots {
+  animation: verb-dots 1400ms ease-in-out infinite;
+}
