@@ -20,33 +20,37 @@ export function Canvas({
   activeScene,
   formatHint,
   workspacePath,
+  fallbackCompositionPath,
 }: {
   activeScene: SceneState | null;
   formatHint: string;
   workspacePath: string | null;
+  /** Aspect-level composition path used when no live preview is
+   *  running and the active scene didn't get its own composition match
+   *  (HyperFrames writes one index.html per aspect, not per scene). */
+  fallbackCompositionPath?: string | null;
 }) {
   const preview = usePreview();
   const [iframeUrl, setIframeUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    // Reach for an iframe-form of the preview if one exists. We don't
-    // start the preview server unless the user clicks an explicit
-    // affordance — the canvas just mirrors whatever preview state
-    // already exists.
+    // Priority order:
+    //   1. live preview server (iframe URL bound to localhost:port)
+    //   2. per-scene composition.html (scene id matched a Write event)
+    //   3. fallback aspect-level composition.html
+    void formatHint;
     if (preview.current?.kind === "iframe") {
       setIframeUrl(preview.current.url);
-    } else if (activeScene?.compositionPath) {
-      // No live preview server, but we know the composition's HTML path —
-      // load it directly through the studio-media protocol so the user
-      // sees the still page even when no dev server is running. Format
-      // hint isn't strictly used here yet; placeholder for richer
-      // per-aspect routing.
-      void formatHint;
-      setIframeUrl(`studio-media://local/${encodeURIComponent(activeScene.compositionPath.replace(/\\/g, "/"))}`);
-    } else {
-      setIframeUrl(null);
+      return;
     }
-  }, [preview.current, activeScene?.compositionPath, formatHint]);
+    const compositionPath = activeScene?.compositionPath ?? fallbackCompositionPath ?? null;
+    if (compositionPath) {
+      const normalized = compositionPath.replace(/\\/g, "/");
+      setIframeUrl(`studio-media://local/${encodeURIComponent(normalized)}`);
+      return;
+    }
+    setIframeUrl(null);
+  }, [preview.current, activeScene?.compositionPath, fallbackCompositionPath, formatHint]);
 
   const isInFlight = activeScene
     ? ["writing", "narrating", "composing", "rendering"].includes(activeScene.status)

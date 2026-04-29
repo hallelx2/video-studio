@@ -63,6 +63,11 @@ export function useSceneState(events: AgentEvent[]): {
   scenes: SceneState[];
   /** The latest `activity` event with no sceneId — i.e. run-wide. */
   globalActivity: ActivityState | null;
+  /** The most recently-written composition `index.html` (aspect-level —
+   *  HyperFrames produces one per aspect, not per scene). The Canvas
+   *  uses this as a fallback iframe source when no live preview server
+   *  is running and no per-scene composition was matched. */
+  latestCompositionPath: string | null;
 } {
   // Track the latest script.json path seen in tool-use events.
   const scriptPath = useMemo(() => latestScriptPath(events), [events]);
@@ -114,7 +119,16 @@ export function useSceneState(events: AgentEvent[]): {
 
     // Walk events forward, applying state transitions.
     let globalActivity: ActivityState | null = null;
-    for (const e of events) {
+    let latestCompositionPath: string | null = null;
+    let lastUserMessageIdx = -1;
+    for (let i = 0; i < events.length; i++) {
+      if (events[i].type === "user_message") lastUserMessageIdx = i;
+    }
+
+    for (let i = 0; i < events.length; i++) {
+      const e = events[i];
+      const isAfterLastUserMessage = i > lastUserMessageIdx;
+
       if (e.type === "progress" && e.sceneId && idx.has(e.sceneId)) {
         const target = scenes[idx.get(e.sceneId)!];
         target.status = phaseToStatus(e.phase) ?? target.status;
@@ -131,41 +145,65 @@ export function useSceneState(events: AgentEvent[]): {
       if (e.type === "agent_tool_use" && e.tool === "Write") {
         const filePath = readToolFilePath(e.input);
         if (!filePath) continue;
-        // Crude scope: if the path contains a scene id, mark that scene as
-        // having its narration / composition produced.
+        const lower = filePath.toLowerCase();
+        // Aspect-level composition (HyperFrames writes one index.html per
+        // aspect, not per scene). Track the most recent for Canvas
+        // fallback regardless of which scene drove it.
+        if (lower.endsWith("index.html") || lower.endsWith(".html")) {
+          latestCompositionPath = filePath;
+        }
+        // Per-scene scope when the path contains a scene id (e.g. a
+        // narration WAV under `narration/<scene-id>.wav`).
         for (const [sceneId, sceneIdx] of idx.entries()) {
           if (filePath.includes(sceneId)) {
             const s = scenes[sceneIdx];
-            const lower = filePath.toLowerCase();
             if (lower.endsWith(".wav") || lower.endsWith(".mp3")) {
               s.narrationPath = filePath;
-            } else if (
-              lower.endsWith("index.html") ||
-              lower.endsWith(".html") ||
-              lower.endsWith(".html")
-            ) {
+            } else if (lower.endsWith("index.html") || lower.endsWith(".html")) {
               s.compositionPath = filePath;
             }
           }
         }
       }
       if (e.type === "result") {
-        // On terminal success, mark every scene that has narration +
-        // composition recorded as ready.
         if (e.status === "success") {
           for (const s of scenes) {
             if (s.status !== "error") s.status = "ready";
           }
         }
       }
-      if (e.type === "error" && e.recoverable === false) {
+      if (e.type === "error") {
+        // Errors are scoped: only paint scenes red if (a) the error is
+        // explicitly non-recoverable AND (b) it landed after the most
+        // recent user message. A new user message (a retry, a follow-up)
+        // resets the implicit error scope so old failures don't haunt
+        // the next attempt. Recoverable errors leave scene state alone —
+        // the user can fix the environment and retry.
+        if (e.recoverable === false && isAfterLastUserMessage) {
+          for (const s of scenes) {
+            if (s.status === "ready") continue;
+            if (
+              s.status === "writing" ||
+              s.status === "narrating" ||
+              s.status === "composing" ||
+              s.status === "rendering"
+            ) {
+              s.status = "error";
+            }
+          }
+        }
+      }
+      if (e.type === "user_message") {
+        // Fresh attempt — clear stale error state. Anything that's still
+        // in flight on the next runAgent pass will get its activity
+        // event back and the status flips again.
         for (const s of scenes) {
-          if (s.status !== "ready") s.status = "error";
+          if (s.status === "error") s.status = "queued";
         }
       }
     }
 
-    return { scenes, globalActivity };
+    return { scenes, globalActivity, latestCompositionPath };
   }, [events, rawScript]);
 }
 

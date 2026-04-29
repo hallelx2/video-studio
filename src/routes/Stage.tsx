@@ -56,7 +56,7 @@ export function StageRoute({
     slashHandlers,
   } = session;
 
-  const { scenes, globalActivity } = useSceneState(events);
+  const { scenes, globalActivity, latestCompositionPath } = useSceneState(events);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -121,6 +121,7 @@ export function StageRoute({
                 activeScene={activeScene}
                 formatHint={formatHint}
                 workspacePath={workspacePath}
+                fallbackCompositionPath={latestCompositionPath}
               />
               <SceneStrip
                 scenes={scenes}
