@@ -5,23 +5,30 @@
  *
  * Why CJS even though the source is ESM: when the agent runs as
  * ELECTRON_RUN_AS_NODE inside the asar, the closest package.json
- * (electron/dist/package.json from our packaging fix) declares
+ * (agent/dist/package.json that this script writes) declares
  * "type": "commonjs". A CJS bundle is the most portable target — it
  * works in dev (Electron 33 / Node 20) and in the packaged asar without
  * any extra .mjs / .cjs naming dance.
  *
  * `platform=node` keeps Node built-ins (fs, path, child_process, …)
- * external. `packages=bundle` (the default with --bundle) inlines every
- * npm dep, so claude-agent-sdk and zod become part of the single file.
+ * external. With `bundle: true` and `external: []`, esbuild inlines
+ * every npm dep so claude-agent-sdk and zod become part of the single
+ * file.
+ *
+ * Pass `--watch` to keep rebuilding on source changes (used by the
+ * agent's `dev` script — replaces the previous `tsc -w` which produced
+ * multi-file ESM output that conflicted with the CJS package.json drop
+ * sitting in the same directory).
  */
-import { build } from "esbuild";
+import { context as createContext, build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { mkdirSync, writeFileSync } from "node:fs";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const watch = process.argv.includes("--watch");
 
-await build({
+const config = {
   entryPoints: [join(here, "src", "index.ts")],
   bundle: true,
   platform: "node",
@@ -29,22 +36,35 @@ await build({
   format: "cjs",
   outfile: join(here, "dist", "index.js"),
   sourcemap: true,
-  // Keep optional / native-side deps that puppeteer-style packages
-  // probe for at runtime out of the bundle. They aren't actually used
-  // by the agent's code path; bundling them just produces noisy resolve
-  // warnings without affecting correctness.
   external: [],
   logLevel: "info",
-});
+};
 
-// Drop a {"type":"commonjs"} so Node loaders honor the bundle format
-// regardless of the parent agent/package.json (which is ESM for source
-// authoring) or the root package.json (also ESM).
-const distDir = join(here, "dist");
-mkdirSync(distDir, { recursive: true });
-writeFileSync(
-  join(distDir, "package.json"),
-  JSON.stringify({ type: "commonjs" }, null, 2) + "\n",
-  "utf8"
-);
-console.log(`[agent/esbuild] wrote ${join(distDir, "package.json")}`);
+// Always drop the {"type":"commonjs"} alongside the bundle so Node
+// loaders honor the bundle format regardless of the parent
+// agent/package.json (ESM for source authoring) or the root
+// package.json (also ESM). Run before the build so even a watch-mode
+// initial build sees the file.
+function ensurePackageJson() {
+  const distDir = join(here, "dist");
+  mkdirSync(distDir, { recursive: true });
+  writeFileSync(
+    join(distDir, "package.json"),
+    JSON.stringify({ type: "commonjs" }, null, 2) + "\n",
+    "utf8"
+  );
+}
+
+ensurePackageJson();
+
+if (watch) {
+  const ctx = await createContext(config);
+  await ctx.watch();
+  console.log("[agent/esbuild] watching for changes…");
+  // Keep the process alive — esbuild's watch mode runs on its own
+  // worker, but the main loop must remain so the dev runner doesn't
+  // see the script exit.
+} else {
+  await build(config);
+  console.log(`[agent/esbuild] wrote ${join(here, "dist", "index.js")}`);
+}

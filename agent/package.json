@@ -8,7 +8,7 @@
     "embed-prompt": "node scripts/embed-prompt.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "build": "pnpm embed-prompt && pnpm typecheck && node esbuild.config.mjs",
-    "dev": "pnpm embed-prompt && tsc -p tsconfig.json -w",
+    "dev": "pnpm embed-prompt && node esbuild.config.mjs --watch",
     "start": "node dist/index.js"
   },
   "dependencies": {
