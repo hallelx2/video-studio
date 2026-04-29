@@ -182,7 +182,18 @@ export class AgentBridge {
    *  the agent-exit error message so non-zero exits actually tell the user
    *  what went wrong instead of just "exited with code 1". */
   private stderrTail: string[] = [];
-  private static readonly STDERR_TAIL_MAX = 12;
+  // Buffer enough stderr to keep the actual error message even when the
+  // stack trace is many frames deep. A typical Node fatal looks like:
+  //   Error: <real cause>
+  //     at Module.load ...
+  //     at Module._load ...
+  //     at c._load ...
+  //     at Function.executeUserEntryPoint ...
+  //     at node:internal/main/run_main_module ...
+  //   Node.js v20.18.3
+  // — that's already 7 lines without any user-frame output. Keep ~50 so
+  // even pathological traces surface the cause line.
+  private static readonly STDERR_TAIL_MAX = 50;
   /** Set to true when the agent emits its own fatal error — used to suppress
    *  the bare "agent exited with code 1" follow-up that otherwise duplicates
    *  the same news in the activity stream. */
@@ -476,9 +487,34 @@ export class AgentBridge {
           /^\(Use `node --trace-deprecation/,
           /^DeprecationWarning:/,
         ];
-        const usefulTail = this.stderrTail
-          .filter((line) => !noisyPatterns.some((re) => re.test(line)))
-          .slice(-6);
+        // Strip stack frames AND noise, then look back to find the
+        // first non-trace line (which is almost always the actual error
+        // headline). Surface that headline + a few following frames for
+        // context. Without this filter, deep traces push the real
+        // "Error: ..." message out of the visible tail entirely.
+        const stackFrameRe = /^\s*at /;
+        const filtered = this.stderrTail.filter(
+          (line) => !noisyPatterns.some((re) => re.test(line))
+        );
+        const lastNonFrameIdx = (() => {
+          for (let i = filtered.length - 1; i >= 0; i--) {
+            if (!stackFrameRe.test(filtered[i]) && filtered[i].trim().length > 0) {
+              // Walk back further while we're still in a contiguous
+              // non-trace block (e.g. multi-line error message).
+              let start = i;
+              while (
+                start > 0 &&
+                !stackFrameRe.test(filtered[start - 1]) &&
+                filtered[start - 1].trim().length > 0
+              ) {
+                start -= 1;
+              }
+              return start;
+            }
+          }
+          return Math.max(0, filtered.length - 6);
+        })();
+        const usefulTail = filtered.slice(lastNonFrameIdx, lastNonFrameIdx + 8);
         const tail = usefulTail.length > 0
           ? `\n\nlast stderr:\n${usefulTail.join("\n")}`
           : "";
