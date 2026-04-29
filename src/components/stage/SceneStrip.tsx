@@ -22,7 +22,7 @@ export function SceneStrip({
   activeSceneId: string | null;
   onSelectScene: (id: string) => void;
   onRewrite: () => void;
-  onReRecord: () => void;
+  onReRecord: (sceneId: string) => void;
   onRestage: () => void;
   disabled?: boolean;
 }) {

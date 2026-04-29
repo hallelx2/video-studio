@@ -22,7 +22,9 @@ export function SceneCard({
   active: boolean;
   onClick: () => void;
   onRewrite: () => void;
-  onReRecord: () => void;
+  /** Called with the scene's id so the parent can scope the
+   *  regeneration to just this scene's narration via runTool. */
+  onReRecord: (sceneId: string) => void;
   onRestage: () => void;
   disabled?: boolean;
 }) {
@@ -85,10 +87,10 @@ export function SceneCard({
           ✏ rewrite
         </ActionPill>
         <ActionPill
-          onClick={onReRecord}
+          onClick={() => onReRecord(scene.id)}
           disabled={disabled}
           aria-label={`Re-record scene ${scene.index + 1} narration`}
-          title="Regenerate narration"
+          title="Regenerate just this scene's narration"
         >
           🔁 re-record
         </ActionPill>

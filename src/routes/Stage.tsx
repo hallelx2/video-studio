@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useWorkbenchSession } from "../lib/use-workbench-session.js";
+import { regenerateNarration } from "../lib/agent-client.js";
 import { useSceneState } from "../lib/scene-state.js";
 import { SessionSidebar } from "../components/agent/SessionSidebar.js";
 import { ArtifactPanel } from "../components/agent/ArtifactPanel.js";
@@ -114,13 +115,19 @@ export function StageRoute({
           <StageHeader
             projectName={productId ?? "this project"}
             sessionTitle={currentSession?.title}
+            projectId={productId}
+            sessionId={session.currentSessionId}
             videoType={videoType}
             formats={formats}
             running={running}
             globalActivity={verbForGlobal}
+            hasScript={scenes.length > 0}
+            hasComposition={!!latestCompositionPath}
             onChangeVideoType={setVideoType}
             onToggleFormat={toggleFormat}
             onOpenDetails={() => setDetailsOpen(true)}
+            onRecompose={() => slashHandlers.onRetryStage("recompose")}
+            onRerender={() => slashHandlers.onRetryStage("rerender")}
           />
 
           {hasHistory ? (
@@ -155,7 +162,21 @@ export function StageRoute({
                 activeSceneId={activeScene?.id ?? null}
                 onSelectScene={setActiveSceneId}
                 onRewrite={() => slashHandlers.onRetryStage("redraft")}
-                onReRecord={() => slashHandlers.onRetryStage("renarrate")}
+                onReRecord={(sceneId) => {
+                  // If we have a session id, run the focused
+                  // narration tool for just this scene — every other
+                  // WAV stays untouched. Otherwise fall back to the
+                  // legacy whole-stage invalidation flow.
+                  if (productId && session.currentSessionId) {
+                    void regenerateNarration(
+                      productId,
+                      session.currentSessionId,
+                      [sceneId]
+                    );
+                  } else {
+                    slashHandlers.onRetryStage("renarrate");
+                  }
+                }}
                 onRestage={() => slashHandlers.onRetryStage("recompose")}
                 disabled={running}
               />

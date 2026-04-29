@@ -5,6 +5,7 @@ import {
   type VideoFormat,
   type VideoType,
 } from "../../lib/types.js";
+import { ToolBar } from "./ToolBar.js";
 
 /**
  * Top header strip for the preview-first Stage layout. Shows project
@@ -15,23 +16,35 @@ import {
 export function StageHeader({
   projectName,
   sessionTitle,
+  projectId,
+  sessionId,
   videoType,
   formats,
   running,
   globalActivity,
+  hasScript,
+  hasComposition,
   onChangeVideoType,
   onToggleFormat,
   onOpenDetails,
+  onRecompose,
+  onRerender,
 }: {
   projectName: string;
   sessionTitle?: string | null;
+  projectId: string | undefined;
+  sessionId: string | null;
   videoType: VideoType;
   formats: VideoFormat[];
   running: boolean;
   globalActivity: string | null;
+  hasScript: boolean;
+  hasComposition: boolean;
   onChangeVideoType: (v: VideoType) => void;
   onToggleFormat: (f: VideoFormat) => void;
   onOpenDetails: () => void;
+  onRecompose: () => void;
+  onRerender: () => void;
 }) {
   return (
     <header className="hairline flex items-center justify-between gap-6 border-b px-6 py-3">
@@ -71,6 +84,15 @@ export function StageHeader({
       </div>
 
       <div className="flex shrink-0 items-baseline gap-3">
+        <ToolBar
+          projectId={projectId}
+          sessionId={sessionId}
+          hasScript={hasScript}
+          hasComposition={hasComposition}
+          running={running}
+          onRecompose={onRecompose}
+          onRerender={onRerender}
+        />
         {/* Video type swap — single tiny chip, opens a popover when clicked.
             For now it cycles through the next type on click. Cheap, gets the
             point across; richer popover ships in a later pass. */}
