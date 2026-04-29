@@ -156,11 +156,40 @@ function StartingBanner({ activity }: { activity: ActivityState | null }) {
 }
 
 function compactErrorMessage(raw: string): string {
-  // Pull out the first line, drop ANSI-ish junk, cap at ~140 chars so the
-  // banner stays single-line. Full message is in the `title` attribute
-  // and one click away in the details modal.
-  const firstLine = raw.split(/\r?\n/)[0] ?? raw;
-  const stripped = firstLine.replace(/\x1b\[[0-9;]*m/g, "").trim();
-  if (stripped.length <= 140) return stripped;
-  return stripped.slice(0, 137) + "…";
+  // Strip ANSI escapes, then find the most signal-y line:
+  //   1. anything starting with "Error:" / "TypeError:" / "ReferenceError:"
+  //   2. anything containing a recognizable hint ("not installed",
+  //      "Cannot find", "ENOENT", "permission denied")
+  //   3. fall back to the first line that isn't a stack-trace frame
+  //   4. if all else fails, the raw first line truncated to 140
+  const stripped = raw.replace(/\x1b\[[0-9;]*m/g, "").trim();
+  const lines = stripped.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+
+  const errorRegex = /^(?:[A-Z][a-zA-Z]*Error|Uncaught|FATAL):/;
+  const hintTokens = [
+    "not installed",
+    "cannot find",
+    "Cannot find",
+    "ENOENT",
+    "EACCES",
+    "permission denied",
+    "ReferenceError",
+    "SyntaxError",
+    "exited with code",
+  ];
+
+  const direct = lines.find((l) => errorRegex.test(l));
+  if (direct) return cap(direct);
+
+  const hinted = lines.find((l) => hintTokens.some((t) => l.includes(t)));
+  if (hinted) return cap(hinted);
+
+  const nonTrace = lines.find((l) => !/^at /.test(l) && !/^\s*\d+\s*\|/.test(l));
+  if (nonTrace) return cap(nonTrace);
+
+  return cap(lines[0] ?? raw);
+}
+
+function cap(s: string): string {
+  return s.length <= 140 ? s : s.slice(0, 137) + "…";
 }
