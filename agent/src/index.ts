@@ -1,4 +1,5 @@
 import { runGenerateVideo } from "./tasks/generate-video.js";
+import { runFullPipeline } from "./tasks/full-pipeline.js";
 import { SYSTEM_PROMPT } from "./system-prompt.generated.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 import { narrationGenerator } from "./tools/narration-generator.js";
@@ -149,19 +150,41 @@ async function main(): Promise<void> {
 
   try {
     switch (command.type) {
-      case "generate-video":
-        await runGenerateVideo({
-          projectId: command.projectId,
-          sessionId: command.sessionId,
-          videoType: command.videoType,
-          formats: command.formats,
-          brief: command.brief,
-          model: command.model,
-          persona: command.persona,
-          systemPrompt: SYSTEM_PROMPT,
-          askUser,
-        });
+      case "generate-video": {
+        // Default to the new tool-composed full-pipeline. The legacy
+        // 1700-line monolith is kept available behind
+        // VIDEO_STUDIO_LEGACY_MACRO=1 for one release as a safety
+        // valve in case a regression slips through. Phase 7 will
+        // delete the legacy task entirely once the new path is
+        // confirmed clean.
+        const useLegacy = process.env.VIDEO_STUDIO_LEGACY_MACRO === "1";
+        if (useLegacy) {
+          await runGenerateVideo({
+            projectId: command.projectId,
+            sessionId: command.sessionId,
+            videoType: command.videoType,
+            formats: command.formats,
+            brief: command.brief,
+            model: command.model,
+            persona: command.persona,
+            systemPrompt: SYSTEM_PROMPT,
+            askUser,
+          });
+        } else {
+          await runFullPipeline({
+            projectId: command.projectId,
+            sessionId: command.sessionId,
+            videoType: command.videoType,
+            formats: command.formats,
+            brief: command.brief,
+            model: command.model,
+            persona: command.persona,
+            systemPrompt: SYSTEM_PROMPT,
+            askUser,
+          });
+        }
         break;
+      }
       case "run-tool":
         await runStandaloneTool(command);
         break;

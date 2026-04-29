@@ -9,6 +9,13 @@ import { narrationGenerator } from "../tools/narration-generator.js";
 import { compositionAuthor } from "../tools/composition-author.js";
 import { videoRenderer } from "../tools/video-renderer.js";
 import { stageOnePrompt, videoTypeMetaFor } from "../tools/prompts.js";
+import { withReviewAndRetry } from "../tools/review-retry.js";
+import {
+  readApprovalState,
+  writeApprovalState,
+  hashFileIfExists,
+  hashCompositionsIfExist,
+} from "../tools/approval-cache.js";
 
 /**
  * Macro orchestrator that runs the full six-stage pipeline by composing
@@ -41,6 +48,15 @@ export interface FullPipelineOptions {
   model?: string;
   persona?: string;
   ttsVoice?: string;
+  /** Approval gate handler. Required for production runs — without it,
+   *  approval-bearing stages (script, composition) auto-approve, which
+   *  is fine for headless / scripted invocations but skips the review
+   *  loop the human flow expects. */
+  askUser?: (
+    question: string,
+    options: string[],
+    payload?: Record<string, unknown>
+  ) => Promise<string>;
 }
 
 export async function runFullPipeline(opts: FullPipelineOptions): Promise<void> {
@@ -72,6 +88,14 @@ export async function runFullPipeline(opts: FullPipelineOptions): Promise<void> 
     persona: opts.persona,
     ttsVoice: opts.ttsVoice ?? process.env.TTS_VOICE ?? "af_nova",
     emit,
+    askUser: opts.askUser,
+  };
+
+  const approvalPath = join(workspaceDir, ".approval.json");
+  const stageEnv: Record<string, string> = {
+    ORG_PROJECTS_PATH: orgRoot,
+    WORKSPACE_PATH: workspaceRoot,
+    TTS_VOICE: ctx.ttsVoice,
   };
 
   // 1. Resume detection — informational; we don't act on the report
@@ -113,45 +137,192 @@ export async function runFullPipeline(opts: FullPipelineOptions): Promise<void> 
     });
   }
 
-  // 3. ScriptDrafter — only when script.json doesn't already exist.
+  // 3. ScriptDrafter + approval gate. The script.json hash gates the
+  //    skip — re-running with an identical previously-approved script
+  //    auto-approves and moves on. Up to 5 user-driven revisions before
+  //    we surface a needs_input result.
   const scriptPath = join(workspaceDir, "script.json");
-  const haveScript = await pathExists(scriptPath);
-  if (!haveScript) {
-    const draftResult = await scriptDrafter.run(ctx, {
+  let scriptApproved = await isScriptAlreadyApproved(approvalPath, scriptPath, opts.videoType);
+  let revision = 0;
+  while (!scriptApproved && revision < 5) {
+    if (revision === 0 && !(await pathExists(scriptPath))) {
+      const draftResult = await scriptDrafter.run(ctx, {
+        videoType: opts.videoType,
+        brief: opts.brief,
+      });
+      if (draftResult.status !== "ok") {
+        emit({
+          type: "result",
+          status: "failed",
+          message: draftResult.message ?? "Script draft failed",
+        });
+        return;
+      }
+    }
+
+    if (!opts.askUser) {
+      // Headless invocation — skip approval, treat as approved.
+      scriptApproved = true;
+      break;
+    }
+
+    const response = await opts.askUser(
+      `Approve the ${opts.videoType} script for ${opts.projectId}?`,
+      ["approve", "revise", "cancel"],
+      { kind: "script-approval", revision }
+    );
+    const intent = classifyResponse(response);
+    if (intent === "cancel") {
+      emit({ type: "result", status: "needs_input", message: "Cancelled at script approval." });
+      return;
+    }
+    if (intent === "approve") {
+      scriptApproved = true;
+      const fresh = await hashFileIfExists(scriptPath);
+      await writeApprovalState(approvalPath, {
+        videoType: opts.videoType,
+        scriptHash: fresh,
+        scriptApprovedAt: Date.now(),
+      });
+      break;
+    }
+
+    // Revision — call the script tool again with the user's notes.
+    revision += 1;
+    const reviseResult = await scriptDrafter.run(ctx, {
       videoType: opts.videoType,
       brief: opts.brief,
+      revisionNotes: response.trim(),
+      revision,
     });
-    if (draftResult.status !== "ok") {
+    if (reviseResult.status !== "ok") {
       emit({
         type: "result",
         status: "failed",
-        message: draftResult.message ?? "Script draft failed",
+        message: reviseResult.message ?? "Script revision failed",
       });
       return;
     }
   }
-
-  // 4. NarrationGenerator — full pass; cache hits skip per-scene work.
-  const narrationResult = await narrationGenerator.run(ctx, {});
-  if (narrationResult.status === "error") {
+  if (!scriptApproved) {
     emit({
       type: "result",
-      status: "failed",
-      message: narrationResult.message ?? "Narration failed",
+      status: "needs_input",
+      message: "Maximum script revisions reached without approval.",
     });
     return;
   }
 
-  // 5. CompositionAuthor — per-format. Cache via composeHash.
-  const composeResult = await compositionAuthor.run(ctx, {
-    videoType: opts.videoType,
-    formats: opts.formats,
-  });
-  if (composeResult.status === "error") {
+  // 4. NarrationGenerator wrapped in withReviewAndRetry — typical
+  //    failure modes (kokoro-onnx missing, ffmpeg missing) get reviewed
+  //    by the agent and the user gets a retry/cancel gate instead of
+  //    a fatal blowout.
+  try {
+    if (opts.askUser) {
+      await withReviewAndRetry(
+        async () => {
+          const r = await narrationGenerator.run(ctx, {});
+          if (r.status === "error") throw new Error(r.message ?? "narration failed");
+          return r;
+        },
+        {
+          stageName: "narration",
+          systemPrompt: opts.systemPrompt,
+          cwd: workspaceDir,
+          env: stageEnv,
+          model: opts.model,
+          askUser: opts.askUser,
+        }
+      );
+    } else {
+      const r = await narrationGenerator.run(ctx, {});
+      if (r.status === "error") throw new Error(r.message ?? "narration failed");
+    }
+  } catch (err) {
     emit({
       type: "result",
-      status: "failed",
-      message: composeResult.message ?? "Composition authoring failed",
+      status: "needs_input",
+      message: `Narration paused — ${err instanceof Error ? err.message : String(err)}`,
+    });
+    return;
+  }
+
+  // 5. CompositionAuthor + approval gate. composeHash mirrors the script
+  //    pattern; up to 5 revisions before we surface needs_input.
+  let composeApproved = await isComposeAlreadyApproved(
+    approvalPath,
+    workspaceDir,
+    opts.formats
+  );
+  let composeRevision = 0;
+  while (!composeApproved && composeRevision < 5) {
+    if (composeRevision === 0) {
+      const composeResult = await compositionAuthor.run(ctx, {
+        videoType: opts.videoType,
+        formats: opts.formats,
+      });
+      if (composeResult.status === "error") {
+        emit({
+          type: "result",
+          status: "failed",
+          message: composeResult.message ?? "Composition authoring failed",
+        });
+        return;
+      }
+    }
+
+    if (!opts.askUser) {
+      composeApproved = true;
+      break;
+    }
+
+    const response = await opts.askUser(
+      `Composition is ready. Render now, or preview first?`,
+      ["render", "revise", "cancel"],
+      { kind: "compose-approval", revision: composeRevision }
+    );
+    const intent = classifyComposeResponse(response);
+    if (intent === "cancel") {
+      emit({
+        type: "result",
+        status: "needs_input",
+        message: "Cancelled at composition approval.",
+      });
+      return;
+    }
+    if (intent === "render") {
+      composeApproved = true;
+      const fresh = await hashCompositionsForFormats(workspaceDir, opts.formats);
+      const previous = (await readApprovalState(approvalPath)) ?? {};
+      await writeApprovalState(approvalPath, {
+        ...previous,
+        composeHash: fresh,
+        composeApprovedAt: Date.now(),
+      });
+      break;
+    }
+
+    composeRevision += 1;
+    const reviseResult = await compositionAuthor.run(ctx, {
+      videoType: opts.videoType,
+      formats: opts.formats,
+      revisionNotes: response.trim(),
+      revision: composeRevision,
+    });
+    if (reviseResult.status === "error") {
+      emit({
+        type: "result",
+        status: "failed",
+        message: reviseResult.message ?? "Composition revision failed",
+      });
+      return;
+    }
+  }
+  if (!composeApproved) {
+    emit({
+      type: "result",
+      status: "needs_input",
+      message: "Maximum composition revisions reached without approval.",
     });
     return;
   }
@@ -190,4 +361,60 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+async function isScriptAlreadyApproved(
+  approvalPath: string,
+  scriptPath: string,
+  videoType: string
+): Promise<boolean> {
+  const previous = await readApprovalState(approvalPath);
+  if (!previous?.scriptHash) return false;
+  const currentHash = await hashFileIfExists(scriptPath);
+  if (!currentHash || currentHash !== previous.scriptHash) return false;
+  if (previous.videoType != null && previous.videoType !== videoType) return false;
+  return true;
+}
+
+async function isComposeAlreadyApproved(
+  approvalPath: string,
+  workspaceDir: string,
+  formats: string[]
+): Promise<boolean> {
+  const previous = await readApprovalState(approvalPath);
+  if (!previous?.composeHash) return false;
+  const currentHash = await hashCompositionsForFormats(workspaceDir, formats);
+  return currentHash != null && currentHash === previous.composeHash;
+}
+
+async function hashCompositionsForFormats(
+  workspaceDir: string,
+  formats: string[]
+): Promise<string | null> {
+  // Resolve aspects from formats and feed to the shared hasher. Shape
+  // matches what hashCompositionsIfExist expects.
+  const seen = new Set<string>();
+  const compositions: Array<{ aspect: string; indexHtml: string }> = [];
+  for (const f of formats) {
+    const aspect =
+      f === "linkedin" ? "1080x1080" : f === "youtube-short" ? "1080x1920" : "1920x1080";
+    if (seen.has(aspect)) continue;
+    seen.add(aspect);
+    compositions.push({ aspect, indexHtml: join(workspaceDir, aspect, "index.html") });
+  }
+  return hashCompositionsIfExist(compositions);
+}
+
+function classifyResponse(raw: string): "approve" | "revise" | "cancel" {
+  const t = raw.trim().toLowerCase();
+  if (t === "approve" || t === "ok" || t === "yes" || t === "ship it") return "approve";
+  if (t === "cancel" || t === "abort" || t === "stop" || t === "no") return "cancel";
+  return "revise";
+}
+
+function classifyComposeResponse(raw: string): "render" | "revise" | "cancel" {
+  const t = raw.trim().toLowerCase();
+  if (t === "render" || t === "ok" || t === "yes" || t === "go") return "render";
+  if (t === "cancel" || t === "abort" || t === "stop" || t === "no") return "cancel";
+  return "revise";
 }
