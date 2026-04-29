@@ -1,5 +1,7 @@
 import { cn } from "../../lib/cn.js";
 import { useActivityVerb } from "../../lib/activity-verbs.js";
+import { useExclusiveAudio } from "../../lib/exclusive-audio.js";
+import { pathToMediaUrl } from "../../lib/media-url.js";
 import type { SceneState } from "../../lib/scene-state.js";
 
 /**
@@ -51,6 +53,14 @@ export function SceneCard({
 
       <p className="line-clamp-2 text-xs text-fg-muted">{scene.narration || "…"}</p>
 
+      {/* Inline narration player — appears the moment the WAV lands. The
+          audio element is shared via useExclusiveAudio so playing one
+          scene auto-pauses any other playing scene. preload=metadata
+          keeps the UI responsive even with many scenes mounted. */}
+      {scene.narrationPath && (
+        <NarrationPlayer narrationPath={scene.narrationPath} />
+      )}
+
       {isInFlight && verb ? (
         <span
           key={cycleKey}
@@ -92,6 +102,33 @@ export function SceneCard({
         </ActionPill>
       </div>
     </div>
+  );
+}
+
+/**
+ * 28px-tall native audio control bound to the scene's narration WAV via
+ * the studio-media protocol. Cheap (preload=metadata) so dozens of
+ * cards mounted in the strip don't all eagerly fetch the full WAV.
+ * useExclusiveAudio coordinates auto-pause across the strip.
+ */
+function NarrationPlayer({ narrationPath }: { narrationPath: string }) {
+  const audioRef = useExclusiveAudio<HTMLAudioElement>();
+  return (
+    <audio
+      ref={audioRef}
+      controls
+      preload="metadata"
+      className="mt-1 h-7 w-full"
+      // Stop click propagation so playing/seeking doesn't also fire
+      // the parent SceneCard's onClick (which selects the scene).
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === " " || e.key === "Enter") e.stopPropagation();
+      }}
+      src={pathToMediaUrl(narrationPath)}
+    >
+      Your browser does not support the audio element.
+    </audio>
   );
 }
 

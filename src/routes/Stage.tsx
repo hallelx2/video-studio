@@ -12,6 +12,7 @@ import { RenderStrip } from "../components/stage/RenderStrip.js";
 import { DetailsModal } from "../components/stage/DetailsModal.js";
 import { StageStatus } from "../components/stage/StageStatus.js";
 import { StageRibbon } from "../components/stage/StageRibbon.js";
+import { StageInlineApproval } from "../components/stage/StageInlineApproval.js";
 
 /**
  * Preview-first studio layout. Replaces Workbench's chat-shaped main
@@ -136,6 +137,13 @@ export function StageRoute({
                 currentStageId={agent.currentStageId}
                 onOpenDetails={() => setDetailsOpen(true)}
               />
+              {agent.pendingPrompt && (
+                <StageInlineApproval
+                  prompt={agent.pendingPrompt}
+                  onRespond={handlePromptResponse}
+                  onOpenDetails={() => setDetailsOpen(true)}
+                />
+              )}
               <Canvas
                 activeScene={activeScene}
                 formatHint={formatHint}
