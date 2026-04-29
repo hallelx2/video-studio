@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { runAgent } from "../claude.js";
-import { emit } from "../index.js";
+import { emit, emitActivity } from "../index.js";
 
 // ─── WAV duration measurement ─────────────────────────────────────────────
 // Read just enough of the RIFF/WAVE header to compute the audio duration in
@@ -313,6 +313,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       message: `Reading ${opts.projectId} from ${projectSourcePath}`,
       progress: 0.05,
     });
+    emitActivity("reading", { force: true });
 
     await runAgent({
       prompt: stageOnePrompt({
@@ -362,6 +363,9 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
         : "Drafting script",
     progress: 0.25,
   });
+  if (!scriptAlreadyApproved && !resume.skipDraftScript) {
+    emitActivity("drafting", { force: true });
+  }
 
   let approved = scriptAlreadyApproved;
   let revision = 0;
@@ -451,6 +455,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       message: `Revising script (round ${revision})`,
       progress: 0.25,
     });
+    emitActivity("revising", { force: true });
 
     await runAgent({
       prompt: reviseScriptPrompt({
@@ -493,6 +498,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       message: "Generating narration via Kokoro (HyperFrames TTS)",
       progress: 0.45,
     });
+    emitActivity("narrating", { force: true });
 
     try {
       await withReviewAndRetry(
@@ -543,6 +549,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
       message: "Authoring HyperFrames composition(s)",
       progress: 0.65,
     });
+    emitActivity("composing", { force: true });
 
     await runAgent({
       prompt: stageFivePrompt({
@@ -688,6 +695,7 @@ export async function runGenerateVideo(opts: GenerateVideoOptions): Promise<void
     message: `Rendering ${opts.formats.length} format(s)`,
     progress: 0.85,
   });
+  emitActivity("rendering", { force: true });
 
   await runAgent({
     prompt: stageSixPrompt({
@@ -1278,9 +1286,11 @@ async function runNarrationDirect(opts: {
       phase: "narration",
       message: `scene ${i + 1}/${scenes.length}: ${scene.id} (${cached ? "cached" : "generating"})`,
       progress: sceneProgress,
+      sceneId: scene.id,
     });
 
     if (!cached) {
+      emitActivity("narrating", { sceneId: scene.id, force: true });
       await runTtsCommand({
         text: scene.narration,
         voice: opts.ttsVoice,

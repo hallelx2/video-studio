@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import { emit } from "./index.js";
+import { emit, emitActivity } from "./index.js";
 
 export interface RunAgentOptions {
   /** The user-facing prompt describing the task in plain English */
@@ -157,6 +157,11 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
       });
 
       for await (const msg of result) {
+        // Per-turn heartbeat: lets the renderer rotate "considering /
+        // pondering / synthesizing" verbs while the model is mid-flight.
+        // emitActivity throttles internally so this is at most one event
+        // per 1.2s regardless of how chatty the SDK iterator is.
+        emitActivity("considering");
         streamMessage(msg);
       }
       return; // clean run — done.
@@ -183,6 +188,7 @@ export async function runAgent(opts: RunAgentOptions): Promise<void> {
         phase: "retrying",
         message: `Stream interrupted — retry ${attempt}/${MAX_RETRIES + 1} in ${Math.round(backoffMs / 1000)}s`,
       });
+      emitActivity("retrying", { force: true });
       await new Promise((r) => setTimeout(r, backoffMs));
     }
   }

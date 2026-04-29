@@ -199,4 +199,51 @@ export function emit(msg: unknown): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
+/**
+ * Activity-state names mirror the union in electron/types.ts. Duplicated
+ * (not imported) because the agent runs as a separate compiled bundle and
+ * we don't want a build-time dependency on the electron tsconfig.
+ */
+export type ActivityState =
+  | "reading"
+  | "considering"
+  | "drafting"
+  | "revising"
+  | "narrating"
+  | "composing"
+  | "rendering"
+  | "polishing"
+  | "stitching"
+  | "waiting"
+  | "retrying";
+
+/**
+ * Throttle map — last-emit timestamp keyed by `${state}:${sceneId ?? ""}`.
+ * The activity channel is high-frequency (every SDK turn boundary, every
+ * scene's TTS spawn, etc.) so we collapse adjacent same-state events to
+ * at most one per `MIN_INTERVAL_MS` to avoid flooding the renderer with
+ * redundant verb refreshes.
+ */
+const ACTIVITY_THROTTLE = new Map<string, number>();
+const ACTIVITY_THROTTLE_MS = 1200;
+
+export function emitActivity(
+  state: ActivityState,
+  opts: { sceneId?: string; subject?: string; force?: boolean } = {}
+): void {
+  const key = `${state}:${opts.sceneId ?? ""}`;
+  const now = Date.now();
+  if (!opts.force) {
+    const last = ACTIVITY_THROTTLE.get(key) ?? 0;
+    if (now - last < ACTIVITY_THROTTLE_MS) return;
+  }
+  ACTIVITY_THROTTLE.set(key, now);
+  emit({
+    type: "activity",
+    state,
+    ...(opts.sceneId ? { sceneId: opts.sceneId } : {}),
+    ...(opts.subject ? { subject: opts.subject } : {}),
+  });
+}
+
 main();
