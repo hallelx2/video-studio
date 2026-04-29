@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.7](https://github.com/hallelx2/video-studio/compare/v0.1.6...v0.1.7) (2026-04-29)
+
+
+### Bug Fixes
+
+* **stage:** scope error state + load composition iframe by aspect, not scene ([0624b28](https://github.com/hallelx2/video-studio/commit/0624b28924a4d859eba8940245ccd3f3c0762212))
+
 ## [0.1.6](https://github.com/hallelx2/video-studio/compare/v0.1.5...v0.1.6) (2026-04-29)
 
 
