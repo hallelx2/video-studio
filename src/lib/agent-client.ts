@@ -103,6 +103,68 @@ export async function regenerateNarration(
   });
 }
 
+/**
+ * Re-author HyperFrames composition(s) for the requested formats. Pass
+ * revisionNotes to apply targeted edits to existing index.html files
+ * instead of regenerating from scratch.
+ */
+export async function regenerateComposition(
+  projectId: string,
+  sessionId: string,
+  args: { videoType: string; formats: string[]; revisionNotes?: string }
+): Promise<{
+  status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+  message?: string;
+}> {
+  return runTool({
+    projectId,
+    sessionId,
+    toolName: "composition.author",
+    input: args,
+  });
+}
+
+/**
+ * Re-render the requested formats. Skips previously-generated MP4s when
+ * they already exist on disk; pass `force: true` (via input) on the
+ * runTool path to override.
+ */
+export async function rerunRender(
+  projectId: string,
+  sessionId: string,
+  formats: string[]
+): Promise<{
+  status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+  message?: string;
+}> {
+  return runTool({
+    projectId,
+    sessionId,
+    toolName: "video.render",
+    input: { formats },
+  });
+}
+
+/**
+ * Re-draft (or revise) the script. revisionNotes triggers a revise run
+ * against the existing script.json; absent notes draft a fresh one.
+ */
+export async function regenerateScript(
+  projectId: string,
+  sessionId: string,
+  args: { videoType: string; brief: string; revisionNotes?: string; revision?: number }
+): Promise<{
+  status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+  message?: string;
+}> {
+  return runTool({
+    projectId,
+    sessionId,
+    toolName: "script.draft",
+    input: args,
+  });
+}
+
 export async function getConfig(): Promise<AppConfig> {
   return studio().config.get();
 }

@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { cn } from "../../lib/cn.js";
-import { regenerateNarration } from "../../lib/agent-client.js";
+import {
+  regenerateNarration,
+  regenerateComposition,
+  rerunRender,
+} from "../../lib/agent-client.js";
+import type { VideoFormat, VideoType } from "../../lib/types.js";
 
 /**
  * First-class tool buttons in StageHeader. Lets the user fire focused
@@ -18,23 +23,30 @@ import { regenerateNarration } from "../../lib/agent-client.js";
 export function ToolBar({
   projectId,
   sessionId,
+  videoType,
+  formats,
   hasScript,
   hasComposition,
   running,
-  onRecompose,
-  onRerender,
+  onRecomposeFallback,
+  onRerenderFallback,
 }: {
   projectId: string | undefined;
   sessionId: string | null;
+  videoType: VideoType;
+  formats: VideoFormat[];
   hasScript: boolean;
   hasComposition: boolean;
   running: boolean;
-  onRecompose: () => void;
-  onRerender: () => void;
+  /** Used when sessionId is missing — falls back to the legacy
+   *  whole-stage invalidation handlers (slashHandlers.onRetryStage). */
+  onRecomposeFallback: () => void;
+  onRerenderFallback: () => void;
 }) {
   const [pending, setPending] = useState<string | null>(null);
+  const canRunTool = !!projectId && !!sessionId;
 
-  const narrationDisabled = running || !hasScript || !!pending || !projectId || !sessionId;
+  const narrationDisabled = running || !hasScript || !!pending || !canRunTool;
   const composeDisabled = running || !hasScript || !!pending;
   const renderDisabled = running || !hasComposition || !!pending;
 
@@ -44,6 +56,34 @@ export function ToolBar({
     setPending("narration");
     try {
       await regenerateNarration(projectId, sessionId);
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleCompose = async () => {
+    if (composeDisabled) return;
+    if (!canRunTool) {
+      onRecomposeFallback();
+      return;
+    }
+    setPending("composition");
+    try {
+      await regenerateComposition(projectId!, sessionId!, { videoType, formats });
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const handleRender = async () => {
+    if (renderDisabled) return;
+    if (!canRunTool) {
+      onRerenderFallback();
+      return;
+    }
+    setPending("render");
+    try {
+      await rerunRender(projectId!, sessionId!, formats);
     } finally {
       setPending(null);
     }
@@ -65,8 +105,9 @@ export function ToolBar({
         label="+ narration"
       />
       <ToolButton
-        onClick={onRecompose}
+        onClick={handleCompose}
         disabled={composeDisabled}
+        loading={pending === "composition"}
         title={
           !hasScript
             ? "Needs a script first"
@@ -77,8 +118,9 @@ export function ToolBar({
         label="+ composition"
       />
       <ToolButton
-        onClick={onRerender}
+        onClick={handleRender}
         disabled={renderDisabled}
+        loading={pending === "render"}
         title={
           !hasComposition
             ? "Needs a composition first"

@@ -87,11 +87,13 @@ export function StageHeader({
         <ToolBar
           projectId={projectId}
           sessionId={sessionId}
+          videoType={videoType}
+          formats={formats}
           hasScript={hasScript}
           hasComposition={hasComposition}
           running={running}
-          onRecompose={onRecompose}
-          onRerender={onRerender}
+          onRecomposeFallback={onRecompose}
+          onRerenderFallback={onRerender}
         />
         {/* Video type swap — single tiny chip, opens a popover when clicked.
             For now it cycles through the next type on click. Cheap, gets the

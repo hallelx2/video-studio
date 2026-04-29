@@ -3,13 +3,19 @@ import { SYSTEM_PROMPT } from "./system-prompt.generated.js";
 import type { Tool, ToolContext } from "./tools/types.js";
 import { narrationGenerator } from "./tools/narration-generator.js";
 import { resumeDetector } from "./tools/resume-detector.js";
+import { scriptDrafter } from "./tools/script-drafter.js";
+import { compositionAuthor } from "./tools/composition-author.js";
+import { videoRenderer } from "./tools/video-renderer.js";
 import { resolve, join } from "node:path";
 import { mkdirSync } from "node:fs";
 
 /** Registry of standalone tools the renderer can invoke directly via
  *  `studio.agent.runTool`. Keep stable strings — they're the IPC names. */
 const TOOLS: Record<string, Tool<any, any>> = {
+  [scriptDrafter.name]: scriptDrafter,
   [narrationGenerator.name]: narrationGenerator,
+  [compositionAuthor.name]: compositionAuthor,
+  [videoRenderer.name]: videoRenderer,
   [resumeDetector.name]: resumeDetector,
 };
 
