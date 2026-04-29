@@ -57,6 +57,52 @@ export async function invalidateStage(
   return studio().agent.invalidateStage(projectId, stage);
 }
 
+/**
+ * Direct-invoke a single tool from the agent's TOOLS registry. The
+ * renderer uses this for per-scene actions (regenerate one scene's
+ * narration) and tool-bar buttons that should run a focused operation
+ * without a full pipeline trip.
+ *
+ * Events from the tool stream through the same `onAgentEvent` channel
+ * as the macro task; this promise resolves once a `tool_finished`
+ * event arrives for the named tool.
+ */
+export async function runTool(req: {
+  projectId: string;
+  sessionId: string;
+  toolName: string;
+  input: unknown;
+  model?: string;
+  persona?: string;
+}): Promise<{
+  status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+  message?: string;
+}> {
+  return studio().agent.runTool(req);
+}
+
+/**
+ * Convenience: regenerate narration for a specific list of scene IDs
+ * (or all scenes if none provided). Routes through the standalone
+ * narration tool so other scenes' WAVs are untouched.
+ */
+export async function regenerateNarration(
+  projectId: string,
+  sessionId: string,
+  sceneIds?: string[],
+  opts?: { force?: boolean }
+): Promise<{
+  status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+  message?: string;
+}> {
+  return runTool({
+    projectId,
+    sessionId,
+    toolName: "narration.generate",
+    input: { sceneIds, force: opts?.force ?? false },
+  });
+}
+
 export async function getConfig(): Promise<AppConfig> {
   return studio().config.get();
 }

@@ -401,6 +401,29 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle("agent:is-running", async () => agent.isRunning());
 
+  // Direct-invoke a single tool (e.g. narration.generate for one scene).
+  // Spawns its own short-lived agent process via the bridge — runs
+  // alongside any in-flight macro pipeline OR rejects with BUSY if a
+  // tool is already running on this session. Cancelable through the
+  // existing agent:cancel IPC.
+  ipcMain.handle(
+    "agent:run-tool",
+    async (
+      _,
+      req: {
+        projectId: string;
+        sessionId: string;
+        toolName: string;
+        input: unknown;
+        model?: string;
+        persona?: string;
+      }
+    ) => {
+      const config = await loadConfig();
+      return agent.runTool(req, config);
+    }
+  );
+
   // Wipe cached artifacts for a pipeline stage so the resume detector treats
   // it (and everything downstream) as not-done. Used by the chat slash
   // commands /renarrate, /recompose, /rerender, /redraft so the user can

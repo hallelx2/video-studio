@@ -443,6 +443,21 @@ export type AgentEvent =
         warnings?: string[];
       };
     }
+  | {
+      /** Emitted by tool modules when a standalone tool starts. The
+       *  renderer can correlate started/finished pairs by toolCallId. */
+      type: "tool_started";
+      name: string;
+      toolCallId: string;
+      input?: unknown;
+    }
+  | {
+      type: "tool_finished";
+      name: string;
+      toolCallId: string;
+      status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+      message?: string;
+    }
   | { type: "error"; scope?: string; message: string; recoverable?: boolean }
   | { type: "raw"; text: string };
 
@@ -483,6 +498,25 @@ export interface StudioBridge {
       projectId: string,
       stage: "redraft" | "renarrate" | "recompose" | "rerender"
     ): Promise<{ removed: string[] }>;
+    /**
+     * Direct-invoke a single tool from the agent's TOOLS registry. Lets
+     * the renderer (e.g. a per-scene "re-record" button) bypass the
+     * full pipeline and run just one focused operation. Each call
+     * spawns its own short-lived agent process; cancel via the existing
+     * cancel() IPC. Events from the tool stream through the same
+     * onEvent channel as the macro task.
+     */
+    runTool(req: {
+      projectId: string;
+      sessionId: string;
+      toolName: string;
+      input: unknown;
+      model?: string;
+      persona?: string;
+    }): Promise<{
+      status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+      message?: string;
+    }>;
   };
   fs: {
     /** Read a UTF-8 text file. Returns null if the file doesn't exist. */

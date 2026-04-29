@@ -41,6 +41,11 @@ const bridge: StudioBridge = {
         projectId,
         stage
       ) as Promise<{ removed: string[] }>,
+    runTool: (req) =>
+      ipcRenderer.invoke("agent:run-tool", req) as Promise<{
+        status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+        message?: string;
+      }>,
     onEvent: (handler: (event: AgentEvent) => void) => {
       const listener = (_: unknown, event: AgentEvent) => handler(event);
       ipcRenderer.on("agent-event", listener);

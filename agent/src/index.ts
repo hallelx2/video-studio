@@ -1,13 +1,35 @@
 import { runGenerateVideo } from "./tasks/generate-video.js";
 import { SYSTEM_PROMPT } from "./system-prompt.generated.js";
+import type { Tool, ToolContext } from "./tools/types.js";
+import { narrationGenerator } from "./tools/narration-generator.js";
+import { resumeDetector } from "./tools/resume-detector.js";
+import { resolve, join } from "node:path";
+import { mkdirSync } from "node:fs";
+
+/** Registry of standalone tools the renderer can invoke directly via
+ *  `studio.agent.runTool`. Keep stable strings — they're the IPC names. */
+const TOOLS: Record<string, Tool<any, any>> = {
+  [narrationGenerator.name]: narrationGenerator,
+  [resumeDetector.name]: resumeDetector,
+};
 
 type AgentCommand =
   | {
       type: "generate-video";
       projectId: string;
+      sessionId?: string;
       videoType: string;
       formats: string[];
       brief: string;
+      model?: string;
+      persona?: string;
+    }
+  | {
+      type: "run-tool";
+      projectId: string;
+      sessionId: string;
+      toolName: string;
+      input: unknown;
       model?: string;
       persona?: string;
     }
@@ -124,6 +146,7 @@ async function main(): Promise<void> {
       case "generate-video":
         await runGenerateVideo({
           projectId: command.projectId,
+          sessionId: command.sessionId,
           videoType: command.videoType,
           formats: command.formats,
           brief: command.brief,
@@ -132,6 +155,9 @@ async function main(): Promise<void> {
           systemPrompt: SYSTEM_PROMPT,
           askUser,
         });
+        break;
+      case "run-tool":
+        await runStandaloneTool(command);
         break;
       case "list-projects":
         // The Electron host owns the project listing now (electron/projects.ts).
@@ -169,6 +195,10 @@ function parseCommand(args: string[]): AgentCommand | null {
         ? (parsed.formats as string[])
         : ["linkedin"];
       const brief = String(parsed.brief ?? "");
+      const sessionId =
+        typeof parsed.sessionId === "string" && parsed.sessionId.length > 0
+          ? parsed.sessionId
+          : undefined;
       const model =
         typeof parsed.model === "string" && parsed.model.length > 0 ? parsed.model : undefined;
       const persona =
@@ -179,6 +209,7 @@ function parseCommand(args: string[]): AgentCommand | null {
       return {
         type: "generate-video",
         projectId,
+        sessionId,
         videoType,
         formats,
         brief,
@@ -189,10 +220,96 @@ function parseCommand(args: string[]): AgentCommand | null {
       return null;
     }
   }
+  if (cmd === "run-tool" && payload) {
+    try {
+      const parsed = JSON.parse(payload) as Record<string, unknown>;
+      const projectId = String(parsed.projectId ?? "").trim();
+      const sessionId = String(parsed.sessionId ?? "").trim();
+      const toolName = String(parsed.toolName ?? "").trim();
+      if (!projectId || !sessionId || !toolName) return null;
+      return {
+        type: "run-tool",
+        projectId,
+        sessionId,
+        toolName,
+        input: parsed.input ?? {},
+        model: typeof parsed.model === "string" ? parsed.model : undefined,
+        persona: typeof parsed.persona === "string" ? parsed.persona : undefined,
+      };
+    } catch {
+      return null;
+    }
+  }
   if (cmd === "list-projects") {
     return { type: "list-projects" };
   }
   return null;
+}
+
+/**
+ * Build a ToolContext from the run-tool dispatcher arguments and invoke
+ * the matching tool from the TOOLS registry. The tool's own emit calls
+ * stream `tool_started` / `tool_finished` plus its own progress /
+ * activity events through stdout, so the bridge's generic forwarder
+ * surfaces them in the renderer without any special-casing.
+ */
+async function runStandaloneTool(command: {
+  type: "run-tool";
+  projectId: string;
+  sessionId: string;
+  toolName: string;
+  input: unknown;
+  model?: string;
+  persona?: string;
+}): Promise<void> {
+  const tool = TOOLS[command.toolName];
+  if (!tool) {
+    emit({
+      type: "error",
+      scope: "run-tool",
+      message: `Unknown tool: ${command.toolName}`,
+      recoverable: true,
+    });
+    return;
+  }
+
+  const orgRoot = resolve(
+    process.env.ORG_PROJECTS_PATH ??
+      resolve(
+        process.env.USERPROFILE ?? process.env.HOME ?? "~",
+        "Documents",
+        "organisation-projects"
+      )
+  );
+  const workspaceRoot = resolve(
+    process.env.WORKSPACE_PATH ?? resolve(process.cwd(), ".video-studio-workspace")
+  );
+  const sessionSegment = command.sessionId.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
+  const workspaceDir = join(workspaceRoot, command.projectId, sessionSegment);
+  mkdirSync(workspaceDir, { recursive: true });
+
+  const ttsVoice = process.env.TTS_VOICE ?? "af_nova";
+
+  const ctx: ToolContext = {
+    projectId: command.projectId,
+    sessionId: command.sessionId,
+    workspaceDir,
+    orgRoot,
+    systemPrompt: SYSTEM_PROMPT,
+    model: command.model,
+    persona: command.persona,
+    ttsVoice,
+    emit,
+    askUser,
+  };
+
+  const result = await tool.run(ctx, command.input);
+  emit({
+    type: "result",
+    status: result.status === "ok" ? "success" : result.status === "needs-approval" ? "needs_input" : "failed",
+    message: result.message ?? `${tool.name} ${result.status}`,
+    artifacts: result.artifacts ? { outputs: result.artifacts.map((p) => ({ format: tool.name, path: p })) } : undefined,
+  });
 }
 
 export function emit(msg: unknown): void {

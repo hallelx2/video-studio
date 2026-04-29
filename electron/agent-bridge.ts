@@ -182,6 +182,10 @@ export class AgentBridge {
    *  the agent-exit error message so non-zero exits actually tell the user
    *  what went wrong instead of just "exited with code 1". */
   private stderrTail: string[] = [];
+  /** Listeners registered by runTool() so it can resolve when a
+   *  matching tool_finished event arrives. Fired by parseLine when an
+   *  AgentEvent of that type is parsed. */
+  private toolListeners = new Set<(event: AgentEvent) => void>();
   // Buffer enough stderr to keep the actual error message even when the
   // stack trace is many frames deep. A typical Node fatal looks like:
   //   Error: <real cause>
@@ -535,6 +539,131 @@ export class AgentBridge {
     });
   }
 
+  /**
+   * Direct-invoke a single tool from the agent's TOOLS registry. Spawns
+   * a short-lived agent process with `run-tool <json>` args; events from
+   * the tool stream through the same agent-event IPC channel as the
+   * macro task, and the resolved promise carries the tool_finished
+   * status (or "error" if the process exits without one).
+   *
+   * Refuses to start when a macro generate is already running on this
+   * bridge — same single-process invariant as the existing generate()
+   * method, just for the tool surface.
+   */
+  async runTool(
+    req: {
+      projectId: string;
+      sessionId: string;
+      toolName: string;
+      input: unknown;
+      model?: string;
+      persona?: string;
+    },
+    config: AppConfig
+  ): Promise<{
+    status: "ok" | "skipped" | "cancelled" | "needs-approval" | "error";
+    message?: string;
+  }> {
+    if (this.isRunning()) {
+      return {
+        status: "error",
+        message: "Agent is already running — cancel the current run first.",
+      };
+    }
+
+    const agentEntry = resolveAgentEntry();
+    if (!agentEntry) {
+      return {
+        status: "error",
+        message: "Agent build not found — run `pnpm agent:build`.",
+      };
+    }
+
+    const orgRoot = config.orgProjectsPath ?? defaultOrgRoot();
+    const workspaceRoot = config.workspacePath ?? defaultWorkspaceRoot();
+    if (!existsSync(workspaceRoot)) mkdirSync(workspaceRoot, { recursive: true });
+
+    return await new Promise((resolve) => {
+      let resolved = false;
+      const toolFinishedListener = (event: AgentEvent) => {
+        if (resolved) return;
+        if (event.type === "tool_finished" && event.name === req.toolName) {
+          resolved = true;
+          resolve({ status: event.status, message: event.message });
+        }
+      };
+      this.toolListeners.add(toolFinishedListener);
+
+      const proc = spawn(
+        process.execPath,
+        [
+          agentEntry,
+          "run-tool",
+          JSON.stringify({
+            projectId: req.projectId,
+            sessionId: req.sessionId,
+            toolName: req.toolName,
+            input: req.input,
+            model: req.model ?? config.selectedModel,
+            persona: req.persona ?? config.selectedPersona,
+          }),
+        ],
+        {
+          cwd: workspaceRoot,
+          stdio: ["pipe", "pipe", "pipe"],
+          windowsHide: true,
+          env: {
+            ...process.env,
+            ELECTRON_RUN_AS_NODE: "1",
+            ORG_PROJECTS_PATH: orgRoot,
+            WORKSPACE_PATH: workspaceRoot,
+            TTS_VOICE: config.ttsVoice,
+            CLAUDE_MODEL: req.model ?? config.selectedModel,
+            RENDER_QUALITY: config.renderQuality ?? "standard",
+            RENDER_FPS: String(config.renderFps ?? 30),
+            ...(config.outputDirectory
+              ? { OUTPUT_DIRECTORY: config.outputDirectory }
+              : {}),
+            PREVIEW_PORT: String(config.previewPort ?? 3002),
+            ...applyPythonBin(config.pythonBin),
+          },
+        }
+      );
+
+      this.proc = proc;
+      this.buffer = "";
+
+      proc.stdout.on("data", (chunk: Buffer) => this.handleStdout(chunk));
+      proc.stderr.on("data", (chunk: Buffer) => {
+        const text = chunk.toString("utf8");
+        for (const line of text.split(/\r?\n/).filter(Boolean)) {
+          this.stderrTail.push(line);
+          if (this.stderrTail.length > AgentBridge.STDERR_TAIL_MAX) {
+            this.stderrTail.shift();
+          }
+          this.emit({ type: "agent_log", level: "stderr", text: line });
+        }
+      });
+      proc.on("exit", () => {
+        this.proc = null;
+        this.toolListeners.delete(toolFinishedListener);
+        if (!resolved) {
+          resolved = true;
+          resolve({
+            status: "error",
+            message: "Tool process exited without a tool_finished event.",
+          });
+        }
+      });
+      proc.on("error", (err) => {
+        if (resolved) return;
+        resolved = true;
+        this.toolListeners.delete(toolFinishedListener);
+        resolve({ status: "error", message: err.message });
+      });
+    });
+  }
+
   async respond(promptId: string, response: string): Promise<void> {
     if (!this.proc) {
       // The renderer raced with a state update — typically the agent crashed
@@ -621,6 +750,17 @@ export class AgentBridge {
       // when the process tears down a moment later.
       if (event.type === "error" && event.recoverable === false) {
         this.agentReportedFatal = true;
+      }
+      // Fan tool_finished out to any in-flight runTool listeners so the
+      // IPC promise resolves with the actual tool result.
+      if (event.type === "tool_finished") {
+        for (const listener of this.toolListeners) {
+          try {
+            listener(event);
+          } catch {
+            // listener errors must never derail forwarding
+          }
+        }
       }
       this.emit(event);
     } catch {
