@@ -357,6 +357,25 @@ export interface UsageInfo {
   cache_read_input_tokens?: number;
 }
 
+/**
+ * Semantic state names emitted by the agent on activity events. These are
+ * mapped to a pool of display verbs in the renderer (one state → many
+ * synonyms) so the UI can rotate "Drafting · Crafting · Polishing"
+ * without the agent having to be clever about copy.
+ */
+export type ActivityState =
+  | "reading"
+  | "considering"
+  | "drafting"
+  | "revising"
+  | "narrating"
+  | "composing"
+  | "rendering"
+  | "polishing"
+  | "stitching"
+  | "waiting"
+  | "retrying";
+
 export type AgentEvent =
   /** Synthetic — injected by the renderer when the user types in the chat composer.
    *  Never emitted by the agent itself; flows through the same event log so the
@@ -366,7 +385,29 @@ export type AgentEvent =
       text: string;
       kind: "brief" | "interrupt" | "approval-response" | "follow-up";
     }
-  | { type: "progress"; phase: string; message?: string; progress?: number }
+  | {
+      type: "progress";
+      phase: string;
+      message?: string;
+      progress?: number;
+      /** Optional scope: when a stage is acting on a specific scene, this
+       *  threads the scene id through so the renderer's per-scene UI can
+       *  pick the right card. Backward compatible — existing emit sites
+       *  that don't supply it continue to work. */
+      sceneId?: string;
+    }
+  /** Fine-grained activity events used by the renderer to surface
+   *  Claude-Code-style rotating verbs ("Drafting · Pondering · Crafting")
+   *  on scene cards and the active-canvas overlay. The agent emits a
+   *  semantic state name; the renderer maps it through a verb pool and
+   *  rotates synonyms over time. Throttled at the agent side so a
+   *  long-running stage doesn't flood the IPC channel. */
+  | {
+      type: "activity";
+      state: ActivityState;
+      sceneId?: string;
+      subject?: string;
+    }
   | {
       type: "prompt";
       id: string;

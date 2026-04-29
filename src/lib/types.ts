@@ -19,6 +19,7 @@ export {
 } from "../../electron/types.js";
 
 export type {
+  ActivityState,
   AgentEvent,
   AgentRuntime,
   AppConfig,
